@@ -55,6 +55,11 @@ python server/test_ui.py     # UI preferences and session (pure functions + HTTP
 APPDATA=<tmp> python server/app.py <copy>/Help/Md --port 8799 --no-window
 cd web && node tests/e2e.mjs <copy>/Help/Md <screenshots-dir>
 
+# Performance on a large project (600 topics, 210 snippets)
+python tools/make_big_project.py <tmp>/Big
+APPDATA=<tmp>/appdata python server/app.py <tmp>/Big/Md --port 8794 --no-window
+cd web && node tests/perf.mjs <big topic>   # startup, open, typing, focus, side tabs; also perf-profile.mjs / perf-open.mjs (CPU profiles)
+
 # Release
 python build.py [--skip-web]
 ```
@@ -109,6 +114,11 @@ Check UI changes on screenshots from the e2e run, not only with the type checker
 - `server/mcp_server.py` imports from `app.py`: changing the signature of a `Project` method breaks the MCP server.
 - In the frozen executable, `sys.executable` is `mdEditor.exe`. Use `sys.frozen` / `_MEIPASS` for bundled files, and never run `sys.executable -m ...` (see `mkdocs_command()`).
 - External changes are polled every 2 s (`Workspace.startWatching`). Any code path that writes an open file must go through `Workspace.save` / `saveAll` (which set `busy`) or update the known `mtime` right after writing; otherwise the editor reloads, or asks about, its own write.
+- **Performance**:
+  - project scans must not touch the disk per link. `parse_file()` caches each file by mtime and size, and `_lookup()` resolves links lexically against the file list; never call `Path.resolve()` / `is_file()` in a loop over links;
+  - in the UI, do not render hidden panels on every project reload;
+  - check large pages with `tests/perf.mjs`;
+  - measurements are noisy when other programs or agents run: compare within the same run.
 - Side panels are flex columns with `overflow: auto`. Their rows need `flex: none`, otherwise rows with `overflow: hidden` collapse instead of scrolling.
 - UI state must not use `localStorage`: the origin changes with the port at every launch. Use the preferences/session store (`web/src/session.ts`, saved in `settings.json`).
 - The language is fixed for the page's lifetime (`boot.ts` loads it before importing `main.ts`). Changing it reloads the window.

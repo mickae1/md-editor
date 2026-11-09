@@ -161,6 +161,9 @@ function htmlLinkClose(tokens: Token[], idx: number): number {
 const decodeEntities = (s: string) =>
   s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
 
+/** HTML block made of one comment only. */
+const COMMENT_ONLY = /^\s*<!--([\s\S]*?)-->\s*$/
+
 const INLINE_HTML_ONLY = /^(\s*(<img\b[^>]*>|<br\s*\/?>|<a\s+(?:id|name)="[^"]*"\s*>\s*<\/a>)\s*)+$/i
 const ANCHOR_OPEN = /^<a\s+(?:id|name)="([^"]*)"\s*>$/i
 
@@ -204,6 +207,14 @@ function createMarkdownIt(): MarkdownIt {
 
   r.html_block = (tokens, idx) => {
     const content = tokens[idx].content
+    // A comment alone (editor-only note): an editable comment block.
+    const comment = COMMENT_ONLY.exec(content)
+    if (comment && !comment[1].includes('-->')) {
+      const inner = comment[1]
+      const pre = /^\s*/.exec(inner)![0]
+      const post = pre.length === inner.length ? '' : /\s*$/.exec(inner)![0]
+      return `<div data-comment data-pre="${esc(pre)}" data-post="${esc(post)}"><pre>${esc(inner.slice(pre.length, inner.length - post.length))}</pre></div>\n`
+    }
     if (INLINE_HTML_ONLY.test(content)) return `<p>${content.trim()}</p>\n`
     return `<div data-raw-block="${esc(content.replace(/\n+$/, ''))}"></div>\n`
   }
@@ -236,6 +247,8 @@ function createMarkdownIt(): MarkdownIt {
       return `<a data-anchor="${esc(anchor[1])}"></a>`
     }
     if (html === '') return ''
+    const comment = /^<!--([\s\S]*?)-->$/.exec(html)
+    if (comment) return `<span data-comment-inline="${esc(comment[1])}"></span>`
     return `<span data-raw-inline="${esc(html)}"></span>`
   }
 

@@ -74,6 +74,9 @@ function block(node: PMNode): string {
       return `--8<-- "${node.attrs.src}"`
     case 'rawBlock':
       return node.attrs.raw
+    case 'comment':
+      // "-->" inside the text would end the comment early: it is broken up.
+      return `<!--${node.attrs.pre}${node.textContent.replace(/--+>/g, m => m.slice(0, -1) + ' >')}${node.attrs.post}-->`
     default:
       return node.isTextblock ? inline(node) : blocks(node)
   }
@@ -205,6 +208,8 @@ function inlineAtom(node: PMNode): string {
       return `<a id="${attr(node.attrs.id)}"></a>`
     case 'rawInline':
       return node.attrs.raw
+    case 'commentInline':
+      return `<!--${String(node.attrs.raw).replace(/--+>/g, m => m.slice(0, -1) + ' >')}-->`
     default:
       return node.textContent
   }

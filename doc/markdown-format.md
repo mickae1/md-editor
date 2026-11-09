@@ -89,3 +89,17 @@ The link mark (`web/src/editor/link.ts`) has a `format` attribute that keeps the
 | `<a href="..." ...>text</a>` (inline HTML) | `html` | the original opening tag, with all its attributes, while the target is unchanged; otherwise `<a href="new">` |
 
 HTML links are real links in the editor, not raw HTML. Their text is still Markdown, as in Python-Markdown. An `<a>` without `href` (`<a id>`), or nested links, stay raw. Plain text such as `mailto:x@y` is not a link on the site, so it stays text.
+
+## HTML comments
+
+Comments never reach the site, so they are editor-only notes (`web/src/editor/comment.ts`):
+
+| Source | Node | Saved as |
+|---|---|---|
+| An HTML block made of one comment (`<!-- ... -->` alone, on one or several lines) | `comment`: a text block (`code: true`, no marks). `pre` / `post` keep the whitespace after `<!--` and before `-->` | `<!--{pre}{text}{post}-->` |
+| `<!-- ... -->` inside a paragraph | `commentInline`: an atom with the raw inner text | `<!--{raw}-->` |
+
+- A `-->` typed in the text is written as `-- >`, otherwise it would close the comment and publish the rest.
+- Two comments on consecutive lines become two blocks, separated by a blank line when saved.
+- A block mixing a comment with other HTML or text (`<!-- a --> text`) stays raw HTML.
+- Ctrl+Enter leaves a comment block, and Backspace in an empty one removes it.

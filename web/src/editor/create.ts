@@ -12,6 +12,7 @@ import { createLinkHelpers } from './links'
 import { HeadingWithId, createHeadingMenu } from './heading'
 import { LinkWithFormat } from './link'
 import { TodoHighlight } from './todo'
+import { CommentBlock, CommentInline } from './comment'
 
 export const SNIPPET_MIME = 'application/x-mdeditor-snippet'
 
@@ -27,6 +28,8 @@ export function buildExtensions(host: EditorHost) {
     }),
     LinkWithFormat,
     TodoHighlight,
+    CommentBlock,
+    CommentInline,
     HeadingWithId.configure({ levels: [1, 2, 3, 4, 5, 6] }),
     createHeadingMenu(host),
     CodeBlock,

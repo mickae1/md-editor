@@ -28,11 +28,25 @@ function selectTodo(ed: Editor, todo: Todo): boolean {
     for (const m of (node.text ?? '').matchAll(TODO_RE)) hits.push({ from: pos + m.index, after: '' })
     return false
   })
-  if (!hits.length) return false
   for (const hit of hits) hit.after = flat(ed.state.doc.textBetween(hit.from + 4, Math.min(ed.state.doc.content.size, hit.from + 80), ' '))
   const hit = (hint && hits.find(x => x.after.startsWith(hint))) || (!hint && hits[0]) || null
-  if (!hit) return false
-  ed.chain().focus().setTextSelection({ from: hit.from, to: hit.from + 4 }).scrollIntoView().run()
+  if (hit) {
+    ed.chain().focus().setTextSelection({ from: hit.from, to: hit.from + 4 }).scrollIntoView().run()
+    return true
+  }
+  // TODO inside a comment within a paragraph (<!-- TODO ... -->): select that comment tag.
+  let comment = -1
+  ed.state.doc.descendants((node, pos) => {
+    if (comment >= 0) return false
+    if (node.type.name === 'commentInline' && TODO_RE.test(node.attrs.raw)) {
+      TODO_RE.lastIndex = 0
+      if (!hint || flat(node.attrs.raw.slice(node.attrs.raw.indexOf('TODO') + 4)).startsWith(hint)) comment = pos
+    }
+    TODO_RE.lastIndex = 0
+    return true
+  })
+  if (comment < 0) return false
+  ed.chain().focus().setNodeSelection(comment).scrollIntoView().run()
   return true
 }
 
@@ -59,8 +73,12 @@ export class TodoView {
     if (!ctx.project) { this.todos = []; this.render(); return }
     try { this.todos = await api.todos() } catch { this.todos = [] }
     this.listeners.forEach(fn => fn(this.todos.length))
-    this.render()
+    // Hidden panel: only the badge is updated; the list is drawn when the tab is shown.
+    if (this.el.isConnected) this.render()
   }
+
+  /** Pages whose TODOs are shown (collapsed by default, like the trees). */
+  private expanded = new Set<string>()
 
   render() {
     const words = this.filter.value.toLowerCase().split(/\s+/).filter(Boolean)
@@ -70,15 +88,39 @@ export class TodoView {
       return
     }
     const byFile = new Map<string, Todo[]>()
-    for (const x of shown) byFile.set(x.file, [...(byFile.get(x.file) ?? []), x])
-    this.list.replaceChildren(
+    for (const x of shown) {
+      const items = byFile.get(x.file)
+      if (items) items.push(x)
+      else byFile.set(x.file, [x])
+    }
+    // Few results or a filter: everything open. Otherwise only the pages the user opened:
+    // a large project has thousands of TODOs, their rows are built on demand.
+    const allOpen = words.length > 0 || shown.length <= 60
+    const list = this.list
+    list.replaceChildren(
       h('div', { class: 'search-summary' }, t('todos.summary', { todos: t('todos.count', { n: shown.length }), pages: t('todos.pages', { n: byFile.size }) })),
-      ...[...byFile].map(([file, items]) => h('div', { class: 'todo-file' },
-        h('div', { class: 'search-file-name', title: file, onclick: () => ctx.openFile(file) },
-          icon(items[0].kind === 'snippet' ? 'puzzle' : 'file', 13), h('span', { class: 'label' }, basename(file, '.md')),
-          h('span', { class: 'count' }, String(items.length))),
-        ...items.map(x => h('div', { class: 'search-hit todo-hit', title: t('todos.lineTitle', { file, line: x.line }), onclick: () => this.goTo(x) },
-          h('span', { class: 'line' }, String(x.line)), highlight(x.text))))))
+      ...[...byFile].map(([file, items]) => {
+        const open = allOpen || this.expanded.has(file)
+        const group = h('div', { class: `todo-file ${open ? 'open' : ''}` })
+        const rows = () => items.map(x => h('div', { class: 'search-hit todo-hit', title: t('todos.lineTitle', { file, line: x.line }), onclick: () => this.goTo(x) },
+          h('span', { class: 'line' }, String(x.line)), highlight(x.text)))
+        const toggle = (e: Event) => {
+          e.stopPropagation()
+          if (allOpen) return
+          if (this.expanded.has(file)) this.expanded.delete(file)
+          else this.expanded.add(file)
+          const top = list.scrollTop
+          this.render()
+          list.scrollTop = top
+        }
+        group.append(
+          h('div', { class: 'search-file-name', title: file, onclick: () => ctx.openFile(file) },
+            h('span', { class: 'twisty', onclick: toggle }, icon(open ? 'chevronDown' : 'chevronRight', 13)),
+            icon(items[0].kind === 'snippet' ? 'puzzle' : 'file', 13), h('span', { class: 'label' }, basename(file, '.md')),
+            h('span', { class: 'count' }, String(items.length))),
+          ...(open ? rows() : []))
+        return group
+      }))
   }
 
   /** Opens the page and selects the TODO once its editor is ready. */

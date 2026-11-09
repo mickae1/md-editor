@@ -248,3 +248,27 @@
   border-radius: 3px; padding: 0 2px; box-shadow: 0 0 0 1px rgba(230, 160, 40, .45);
 }
 [data-theme="light"] .md-content .todo-mark { color: #9a5b00; background: rgba(230, 160, 40, .25); }
+
+/* HTML comments (editor/comment.ts): editor-only notes, never on the site. */
+.md-content .comment-block {
+  margin: .8em 0; padding: 6px 10px 8px; border: 1px dashed var(--md-table-border); border-radius: 6px;
+  background: rgba(127, 127, 127, .06);
+}
+.md-content .comment-label { font: 500 11px/1.6 Roboto, sans-serif; color: var(--md-fg); opacity: .6; user-select: none; }
+.md-content .comment-text {
+  margin: 2px 0 0; padding: 0; background: none; border: 0; white-space: pre-wrap;
+  font: italic 14px/1.55 Roboto, sans-serif; color: var(--md-fg); opacity: .85;
+}
+.md-content .comment-inline {
+  display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; margin: 0 2px; vertical-align: baseline;
+  border: 1px dashed var(--md-table-border); border-radius: 10px; cursor: pointer;
+  font: italic 12px/1.6 Roboto, sans-serif; color: var(--md-fg); opacity: .8;
+}
+.md-content .comment-inline:hover, .md-content .comment-inline.ProseMirror-selectednode { opacity: 1; border-style: solid; }
+
+/* Long pages: blocks outside the screen are not laid out or painted until they
+   come near the viewport (the estimated size keeps the scroll bar stable). */
+.md-content > :is(p, ul, ol, table, .tableWrapper, pre, blockquote, .admonition, .snippet-block, .tabbed-set, .comment-block, .raw-block) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3em;
+}

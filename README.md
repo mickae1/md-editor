@@ -112,7 +112,9 @@ Headings, emphasis, lists (Tab to indent), links (Ctrl+K: topics are suggested, 
 
 **Links** keep the form they were written in: `[text](target)`, `<https://...>`, `<name@host>`, `<mailto:...>`, or HTML `<a href="...">`. HTML links, such as `<a href="mailto:...">` produced by converters, are editable links like the others, not raw HTML. Ctrl+click on a `mailto:` link opens the mail program.
 
-**TODO markers.** The word `TODO` (upper case, whole word) is highlighted in the text. The **TODO** tab lists every TODO of the project, grouped by page, with a filter. A click opens the page and selects the TODO. Fenced code blocks are ignored; HTML comments (`<!-- TODO ... -->`) are listed.
+**Comments.** HTML comments (`<!-- ... -->`) never appear on the site; the editor shows them as notes. A comment on its own lines is an editable block marked *visible in the editor only*, and a comment inside a sentence is a small tag that you click to edit.
+
+**TODO markers.** The word `TODO` (upper case, whole word) is highlighted in the text. The **TODO** tab lists every TODO of the project, grouped by page, with a filter. A click opens the page and selects the TODO. Fenced code blocks are ignored; TODOs in comments (`<!-- TODO ... -->`) are listed and selected like the others.
 
 You can drop or paste an image. The image file is copied into `images/` and inserted as an `<img>` tag. Then you can:
 - resize the image with its handle;

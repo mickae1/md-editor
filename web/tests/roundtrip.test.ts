@@ -79,6 +79,13 @@ const cases: [string, string, string?][] = [
   ['HTML mailto link kept', 'Contact <a href="mailto:toto@toto.fr?subject=Help">toto@toto.fr</a>.\n'],
   ['HTML link with other attributes kept', 'Open <a class="ext" href="https://example.com" target="_blank">the **site**</a>.\n'],
   ['plain mailto text stays text', 'Write to mailto:toto@toto.fr directly.\n'],
+  ['comment block', 'Text.\n\n<!-- TODO: check the menu names -->\n\nMore.\n'],
+  ['comment block on several lines', '<!--\nTODO: first\nsecond line\n-->\n'],
+  ['comment block without spaces', '<!--note-->\n'],
+  ['comment inside a paragraph', 'Text <!-- TODO later --> and more.\n'],
+  ['comment in an admonition', '!!! note\n\n    <!-- hidden note -->\n'],
+  ['two comments: two comment blocks', '<!-- a -->\n<!-- b -->\n', '<!-- a -->\n\n<!-- b -->\n'],
+  ['comment followed by text stays raw HTML', '<!-- a --> text\n'],
   ['heading id (spec format)', '## Dates selection { #creatanalyss2 }\n'],
   ['heading id compact kept', '### ACC Demand Overloads {#accoverloads}\n'],
   ['heading id with marks', '## **Bold** and `code` title { #b-1 }\n'],
@@ -123,6 +130,22 @@ for (const [name, src, expected] of cases) {
   ed.chain().extendMarkRange('link').updateAttributes('link', { href: 'mailto:other@toto.fr' }).run()
   check('HTML link: new target written', serializeDoc(ed.state.doc) === 'Contact <a href="mailto:other@toto.fr">Toto</a>.\n', serializeDoc(ed.state.doc))
   ed.destroy()
+}
+
+// 3c. HTML comments are editor-only notes: editable text, not raw HTML
+{
+  const ed = new Editor({ extensions: buildExtensions({ docPath: 'index.md', ancestors: [] }), content: markdownToHtml('<!-- TODO: check -->\n') })
+  const node = ed.state.doc.firstChild!
+  check('comment block: editable text node', node.type.name === 'comment' && node.textContent === 'TODO: check', `${node.type.name} ${node.textContent}`)
+  // Typing "-->" in the comment must not end it early on the site.
+  ed.commands.insertContentAt(node.nodeSize - 1, ' a --> b')
+  check('comment block: "-->" typed in the text is neutralized', serializeDoc(ed.state.doc) === '<!-- TODO: check a -- > b -->\n', serializeDoc(ed.state.doc))
+  ed.destroy()
+  const ed2 = new Editor({ extensions: buildExtensions({ docPath: 'index.md', ancestors: [] }), content: markdownToHtml('Text <!-- TODO later --> end.\n') })
+  let inline = ''
+  ed2.state.doc.descendants(n => { if (n.type.name === 'commentInline') inline = n.attrs.raw; return true })
+  check('inline comment: kept with its spaces', inline === ' TODO later ', JSON.stringify(inline))
+  ed2.destroy()
 }
 
 // 4. Anchors computed like MkDocs (same rules as markdown_anchors() in server/app.py)

@@ -531,6 +531,13 @@ await page4.locator('.todo-hit').first().click()
 await page4.waitForFunction(() => document.querySelector('.tab.active')?.textContent?.includes('Workflow-CreateScenario'))
 await page4.waitForTimeout(400)
 check('TODO click: opens the page and selects the TODO', await page4.evaluate(() => getSelection()?.toString()) === 'TODO')
+check('HTML comment shown as an editor-only comment block', await page4.locator('.doc-view.active .comment-block', { hasText: 'check the menu names' }).count() === 1
+  && await page4.locator('.doc-view.active .raw-block', { hasText: 'check the menu names' }).count() === 0)
+await page4.locator('.side-tab[data-view="todo"]').click()
+await page4.locator('.todo-hit').nth(1).click()
+await page4.waitForTimeout(500)
+check('TODO in <!-- -->: click selects it in the comment', await page4.evaluate(() => getSelection()?.toString() === 'TODO'
+  && !!getSelection()?.anchorNode?.parentElement?.closest('.comment-block')))
 await page4.screenshot({ path: join(shots, '18-todos.png') })
 
 if (process.env.E2E_EXPORT === '1') {

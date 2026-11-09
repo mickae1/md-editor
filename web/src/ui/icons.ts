@@ -4,7 +4,7 @@ import {
   Flame, Check, CircleHelp, AlertTriangle, X, Zap, Bug, FlaskConical, Quote, Puzzle, Scissors, Undo2, Redo2,
   Pilcrow, Minus, FileCode, FolderOpen, Settings, Search, Link2Off, Play, Sun, Moon, Save, FileText, ChevronRight,
   ChevronDown, ExternalLink, Trash2, Plus, Indent, Outdent, Columns3, Rows3, PanelRight, PanelLeft, FileDiff,
-  Braces, GripVertical, Folder, PanelTop, ChevronsDownUp, Unlink, ListTree, Eye, Globe, Download, ListTodo,
+  Braces, GripVertical, Folder, PanelTop, ChevronsDownUp, Unlink, ListTree, Eye, Globe, Download, ListTodo, MessageSquare,
   BookOpen, ArrowUp, ArrowDown, Copy, RefreshCw, ListX, FilePlus, FileX,
 } from 'lucide'
 import { t } from '../i18n'
@@ -19,7 +19,7 @@ const ICONS = {
   chevronRight: ChevronRight, chevronDown: ChevronDown, external: ExternalLink, trash: Trash2, plus: Plus,
   indent: Indent, outdent: Outdent, columns: Columns3, rows: Rows3, panelRight: PanelRight, panelLeft: PanelLeft,
   diff: FileDiff, braces: Braces, grip: GripVertical, tabs: PanelTop, details: ChevronsDownUp, tree: ListTree,
-  eye: Eye, globe: Globe, download: Download, todo: ListTodo, book: BookOpen, arrowUp: ArrowUp, arrowDown: ArrowDown, copy: Copy, refresh: RefreshCw,
+  eye: Eye, globe: Globe, download: Download, todo: ListTodo, comment: MessageSquare, book: BookOpen, arrowUp: ArrowUp, arrowDown: ArrowDown, copy: Copy, refresh: RefreshCw,
   listRemove: ListX, filePlus: FilePlus, fileX: FileX,
 } satisfies Record<string, IconNode>
 

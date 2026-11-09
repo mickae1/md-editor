@@ -421,5 +421,9 @@
   "todos.count": "{n} TODO",
   "todos.count.one": "1 TODO",
   "todos.pages": "{n} pages",
-  "todos.pages.one": "1 page"
+  "todos.pages.one": "1 page",
+  "editor.commentLabel": "Commentaire : visible seulement dans l'éditeur, pas sur le site",
+  "editor.commentInlineTooltip": "Commentaire (pas sur le site) : cliquer pour modifier",
+  "editor.commentInlineTitle": "Commentaire",
+  "editor.commentInlineLabel": "Texte du commentaire (non publié sur le site)"
 }

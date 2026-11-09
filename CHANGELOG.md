@@ -2,6 +2,25 @@
 
 All notable changes to mdEditor. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **HTML comments** (`<!-- ... -->`) are shown as what they are: notes visible in the editor only, never on the site.
+  - A comment on its own lines is an editable comment block.
+  - A comment inside a paragraph is a small tag, edited with a click.
+  - TODOs inside comments are highlighted, and a click in the TODO panel selects them.
+  - Comments are saved as read; a `-->` typed in the text is neutralized so that it cannot end the comment early.
+- Developer tools to measure performance on a large project: `tools/make_big_project.py`, `web/tests/perf.mjs`, `perf-profile.mjs`, `perf-open.mjs`.
+
+### Changed
+
+- **Large projects are much faster.** Measured on 600 topics and 210 snippets:
+  - project analysis (start, return to the window, after a save): 5.7 s → 0.2 s. Links are resolved without disk access, and each file is re-read only when it changed;
+  - reference check before a deletion: 4.4 s → 0.3 s;
+  - typing in a 1,500-line page: about 78 ms → 17 ms per key, because blocks outside the screen are no longer laid out;
+  - TODO tab: 690 ms → 125 ms. Pages are collapsed by default, and the hidden list is no longer redrawn on every reload.
+
 ## [1.1.0] - 2026-11-09
 
 ### Added
@@ -65,5 +84,6 @@ First public version.
 - **Compiled version**: no Python needed on workstations, startup in about half a second.
 - Resizable side panels.
 
-[1.1.0]: https://github.com/mickae1/md-editor/compare/35150ec...HEAD
+[Unreleased]: https://github.com/mickae1/md-editor/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/mickae1/md-editor/compare/35150ec...v1.1.0
 [1.0.0]: https://github.com/mickae1/md-editor/commit/35150ec
