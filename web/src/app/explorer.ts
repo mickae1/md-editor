@@ -14,18 +14,17 @@ interface TreeNode {
   file?: ProjectFile
 }
 
-const STORAGE_KEY = 'mdeditor.explorer.open'
-
-function loadOpen(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')) } catch { return new Set() }
-}
-
 export class Explorer {
   el: HTMLElement
   private list: HTMLElement
   private filter: HTMLInputElement
-  private open = loadOpen()
+  /** Expanded folder keys: everything is collapsed by default (the session restores them). */
+  private open = new Set<string>()
   private activePath: string | null = null
+  /** Path opened by a click in this tree: no reveal (the row is already visible). */
+  private selfOpen: string | null = null
+  /** Called when a folder is expanded or collapsed (session saving). */
+  onExpandChange: () => void = () => {}
 
   constructor() {
     this.filter = h('input', { type: 'search', class: 'filter', placeholder: t('explorer.filterPlaceholder'), oninput: () => this.render() })
@@ -33,16 +32,56 @@ export class Explorer {
     this.el = h('div', { class: 'explorer' }, this.filter, this.list)
   }
 
-  setActive(path: string | null) {
+  /** Expanded folder keys, for the session. */
+  expandedKeys() { return [...this.open] }
+
+  /** Restores the expanded folders (session), without revealing anything. */
+  setExpanded(keys: string[]) {
+    this.open = new Set(keys)
+    this.render()
+  }
+
+  /**
+   * Highlights the active topic. When it changes and `reveal` is set, expands
+   * its parent folders, unless it was opened from this tree.
+   */
+  setActive(path: string | null, reveal = true) {
+    const changed = path !== this.activePath
     this.activePath = path
+    if (changed && reveal && path && path !== this.selfOpen && this.revealPath(path)) this.render()
+    this.selfOpen = null
     this.list.querySelectorAll('.tree-item.active').forEach(e => e.classList.remove('active'))
     if (!path) return
     const item = this.list.querySelector(`.tree-item[data-path="${CSS.escape(path)}"]`)
     if (item) { item.classList.add('active'); item.scrollIntoView({ block: 'nearest' }) }
   }
 
-  private saveOpen() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...this.open])) } catch { /* storage unavailable */ }
+  /** Expands the folders containing `path`; true if something changed. */
+  private revealPath(path: string) {
+    if (!ctx.project) return false
+    const tree = this.build(ctx.project.files.filter(f => f.kind === 'topic'))
+    const chain: string[] = []
+    const walk = (n: TreeNode): boolean => {
+      for (const c of n.children.values()) {
+        if (c.file?.path === path) return true
+        if (c.children.size) {
+          chain.push(c.key)
+          if (walk(c)) return true
+          chain.pop()
+        }
+      }
+      return false
+    }
+    if (!walk(tree)) return false
+    let changed = false
+    for (const k of chain) if (!this.open.has(k)) { this.open.add(k); changed = true }
+    if (changed) this.onExpandChange()
+    return changed
+  }
+
+  private openFromTree(path: string) {
+    this.selfOpen = path
+    ctx.openFile(path)
   }
 
   private build(files: ProjectFile[]): TreeNode {
@@ -102,15 +141,15 @@ export class Explorer {
       const toggle = () => {
         if (this.open.has(n.key)) this.open.delete(n.key)
         else this.open.add(n.key)
-        this.saveOpen()
+        this.onExpandChange()
         this.render()
       }
       const count = countFiles(n)
       const row = h('div', {
-        class: `tree-item folder ${n.file ? 'has-file' : ''}`, style: `padding-left:${8 + depth * 14}px`,
+        class: `tree-item folder ${n.file ? 'has-file' : ''} ${isOpen ? 'open' : ''}`, style: `padding-left:${8 + depth * 14}px`,
         'data-path': n.file?.path ?? '', title: n.file ? t('explorer.folderFileTooltip', { path: n.file.path }) : n.key,
         onclick: (e: MouseEvent) => {
-          if (n.file && !(e.target as HTMLElement).closest('.twisty')) ctx.openFile(n.file.path)
+          if (n.file && !(e.target as HTMLElement).closest('.twisty')) this.openFromTree(n.file.path)
           else toggle()
         },
       },
@@ -128,7 +167,7 @@ export class Explorer {
   private fileItem(f: ProjectFile, label: string, depth: number) {
     const row = h('div', {
       class: 'tree-item file', style: `padding-left:${22 + depth * 14}px`, 'data-path': f.path, title: f.path,
-      onclick: () => ctx.openFile(f.path),
+      onclick: () => this.openFromTree(f.path),
     }, icon('file', 14), h('span', { class: 'label' }, label))
     this.attachMenu(row, f)
     return row

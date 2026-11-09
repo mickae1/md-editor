@@ -7,9 +7,10 @@ import { hostOf, insertImageFiles } from '../editor/create'
 import { IMAGE_ACCEPT } from '../editor/image'
 import { markdownToHtml } from '../markdown/parser'
 import { serializeDoc } from '../markdown/serializer'
-import { basename, join } from '../paths'
+import { docAnchors } from '../markdown/anchors'
+import { basename, dirname, join } from '../paths'
 import { h } from '../ui/dom'
-import { alertDialog, linkDialog, promptDialog, toast } from '../ui/dialogs'
+import { alertDialog, linkDialog, promptDialog, toast, type LinkAnchor } from '../ui/dialogs'
 import { t } from '../i18n'
 import { palette } from '../ui/palette'
 
@@ -17,6 +18,21 @@ const ed = () => ctx.activeEditor
 
 export function topicLinkTargets(): string[] {
   return (ctx.project?.files ?? []).filter(f => f.kind === 'topic').map(f => f.path)
+}
+
+/**
+ * Anchors suggested by the link dialog: of the current page ('') or of another
+ * page (relative to the current one). The current page combines the saved file
+ * (with its snippets) and the headings of the editor, which may not be saved yet.
+ */
+async function linkAnchors(editor: Editor, file: string): Promise<LinkAnchor[]> {
+  const docPath = hostOf(editor).docPath
+  if (file) return api.anchors(join(dirname(docPath), decodeURI(file)))
+  const live = docAnchors(editor.state.doc)
+  let saved: LinkAnchor[] = []
+  try { saved = await api.anchors(docPath) } catch { /* new file */ }
+  const seen = new Set(live.map(a => a.id))
+  return [...live, ...saved.filter(a => !seen.has(a.id))]
 }
 
 export async function editLink(editor = ed()) {
@@ -27,7 +43,7 @@ export async function editLink(editor = ed()) {
   const { from, to, empty } = editor.state.selection
   const text = state.doc.textBetween(from, to, ' ')
   const href = isLink ? editor.getAttributes('link').href ?? '' : ''
-  const result = await linkDialog({ text, href, showText: empty }, topicLinkTargets())
+  const result = await linkDialog({ text, href, showText: empty }, topicLinkTargets(), file => linkAnchors(editor, file))
   if (!result) { editor.commands.focus(); return }
   if (result === 'remove') { editor.chain().focus().extendMarkRange('link').unsetLink().run(); return }
   if (empty) {

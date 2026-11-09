@@ -9,6 +9,9 @@ import { Admonition, AnchorNode, Cell, CodeBlock, HeaderCell, RawBlock, RawInlin
 import { createImage, uploadImageFile } from './image'
 import { createSnippet } from './snippet'
 import { createLinkHelpers } from './links'
+import { HeadingWithId, createHeadingMenu } from './heading'
+import { LinkWithFormat } from './link'
+import { TodoHighlight } from './todo'
 
 export const SNIPPET_MIME = 'application/x-mdeditor-snippet'
 
@@ -18,10 +21,14 @@ export function buildExtensions(host: EditorHost) {
       codeBlock: false,
       strike: false,
       underline: false,
-      heading: { levels: [1, 2, 3, 4, 5, 6] },
-      link: { openOnClick: false, autolink: false, linkOnPaste: true, HTMLAttributes: { rel: null, target: null } },
+      heading: false, // HeadingWithId (attr_list ids)
+      link: false, // LinkWithFormat
       dropcursor: { color: '#c4a744', width: 2 },
     }),
+    LinkWithFormat,
+    TodoHighlight,
+    HeadingWithId.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+    createHeadingMenu(host),
     CodeBlock,
     Admonition,
     TabSet,

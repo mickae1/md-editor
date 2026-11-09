@@ -6,9 +6,10 @@ import { ctx } from '../context'
 import { createEditor } from '../editor/create'
 import { markdownToHtml } from '../markdown/parser'
 import { serializeDoc } from '../markdown/serializer'
+import { docAnchors } from '../markdown/anchors'
 import { basename, isUnder } from '../paths'
 import { h } from '../ui/dom'
-import { choiceDialog, confirmDialog, toast } from '../ui/dialogs'
+import { choiceDialog, toast } from '../ui/dialogs'
 import { icon } from '../ui/icons'
 import { t } from '../i18n'
 
@@ -30,6 +31,13 @@ export class Workspace {
   active: Doc | null = null
   private listeners = new Set<Listener>()
   private dirtyTimer = 0
+  /** > 0 while the editor itself writes files: external change checks wait. */
+  private busy = 0
+  private checking = false
+  /** When the running check started: a check stuck on a request is released after a while. */
+  private checkingSince = 0
+  /** External mtime the user chose to ignore (kept their own changes), by path. */
+  private keptVersion = new Map<string, number>()
 
   constructor(private tabBar: HTMLElement, private area: HTMLElement, private empty: HTMLElement) {
     ctx.snippets.onChange(() => this.refreshDirty())
@@ -209,6 +217,15 @@ export class Workspace {
    * Warns when a modified snippet is shared by several topics.
    */
   async save(doc: Doc): Promise<boolean> {
+    this.busy++
+    try {
+      return await this.saveNow(doc)
+    } finally {
+      this.busy--
+    }
+  }
+
+  private async saveNow(doc: Doc): Promise<boolean> {
     // The dirty flag is refreshed with a delay: recompute it (Ctrl+S right after typing).
     if (doc.kind === 'topic') doc.dirty = serializeDoc(doc.editor.state.doc) !== doc.baseline
     const snippetPaths = ctx.snippets.includedIn(doc.editor.state.doc).filter(p => ctx.snippets.isDirty(p))
@@ -255,72 +272,142 @@ export class Workspace {
   async saveAll() {
     for (const d of this.docs) if (this.hasChanges(d)) if (!(await this.save(d))) return
     // Modified snippets not displayed in any open tab
-    for (const p of ctx.snippets.dirtyPaths()) await ctx.snippets.save(p)
+    this.busy++
+    try {
+      for (const p of ctx.snippets.dirtyPaths()) await ctx.snippets.save(p)
+    } finally {
+      this.busy--
+    }
   }
 
-  /** Checks whether open files were changed outside the editor. */
+  /**
+   * Checks the open files every `ms` while the window is visible (changes made by
+   * Claude, Git or another editor while the user looks at the page), and when
+   * the window gets the focus back.
+   */
+  startWatching(ms = 2000) {
+    const tick = () => {
+      if (document.visibilityState !== 'visible' || document.querySelector('.modal')) return
+      void this.checkExternalChanges()
+    }
+    window.setInterval(tick, ms)
+    window.addEventListener('focus', tick)
+  }
+
+  /**
+   * Reloads the open files changed outside the editor. A file without unsaved
+   * changes is reloaded at once; otherwise the user chooses between reloading
+   * (losing their changes) and keeping their version (the next save then asks
+   * before overwriting the other version).
+   */
   async checkExternalChanges() {
-    if (!ctx.project) return
-    const topicDocs = this.docs.filter(d => d.kind === 'topic')
-    const snippetPaths = [...ctx.snippets.entries.keys()]
-    const paths = [...topicDocs.map(d => d.path), ...snippetPaths]
-    if (!paths.length) return
-    let stats: Record<string, number | null>
-    try { stats = await api.stat(paths) } catch { return }
+    // A check waiting more than 15 s without a dialog is stuck (request lost): start again.
+    const stuck = this.checking && Date.now() - this.checkingSince > 15_000 && !document.querySelector('.modal')
+    if (!ctx.project || (this.checking && !stuck) || this.busy) return
+    this.checking = true
+    const since = this.checkingSince = Date.now()
+    try {
+      const topicDocs = this.docs.filter(d => d.kind === 'topic')
+      const snippetPaths = [...ctx.snippets.entries.keys()]
+      const paths = [...topicDocs.map(d => d.path), ...snippetPaths]
+      if (!paths.length) return
+      let stats: Record<string, number | null>
+      try { stats = await api.stat(paths, 5000) } catch { return }
+      if (this.busy) return // a save started meanwhile: its own write is not an external change
 
-    for (const d of topicDocs) {
-      const m = stats[d.path]
-      if (m == null || d.mtime == null || Math.abs(m - d.mtime) < 0.001) continue
-      if (d.dirty) {
-        const ok = await confirmDialog(t('workspace.fileChangedTitle'),
-          t('workspace.changedOutsideMessage', { path: d.path }), t('workspace.reload'), true)
-        if (!ok) { d.mtime = m; continue }
+      const changed = (path: string, known: number | null) => {
+        const m = stats[path]
+        return m != null && known != null && Math.abs(m - known) >= 0.001 ? m : null
       }
-      await this.reloadTopic(d)
-      toast(t('workspace.reloadedExternal', { name: basename(d.path) }))
-    }
-    for (const p of snippetPaths) {
-      const entry = ctx.snippets.entries.get(p)
-      const m = stats[p]
-      if (!entry || m == null || entry.mtime == null || Math.abs(m - entry.mtime) < 0.001) continue
-      if (ctx.snippets.isDirty(p)) {
-        const ok = await confirmDialog(t('workspace.snippetChangedTitle'),
-          t('workspace.changedOutsideMessage', { path: p }), t('workspace.reload'), true)
-        if (!ok) { entry.mtime = m; continue }
+      /**
+       * Without unsaved changes: reload. With some: ask once per external version
+       * (the answer "keep mine" holds until the file changes again or is saved).
+       */
+      const shouldReload = async (path: string, m: number, dirty: boolean) => {
+        if (!dirty) return true
+        if (this.keptVersion.get(path) === m) return false
+        if (await this.askReload(path)) return true
+        this.keptVersion.set(path, m)
+        return false
       }
-      await ctx.snippets.reload(p)
+      let reloaded = false
+      for (const d of topicDocs) {
+        const m = changed(d.path, d.mtime)
+        if (m == null || !this.docs.includes(d)) continue
+        if (!(await shouldReload(d.path, m, serializeDoc(d.editor.state.doc) !== d.baseline))) continue
+        await this.reloadTopic(d)
+        this.keptVersion.delete(d.path)
+        toast(t('workspace.reloadedExternal', { name: basename(d.path) }))
+        reloaded = true
+      }
+      for (const p of snippetPaths) {
+        const entry = ctx.snippets.entries.get(p)
+        const m = entry ? changed(p, entry.mtime) : null
+        if (m == null) continue
+        if (!(await shouldReload(p, m, ctx.snippets.isDirty(p)))) continue
+        await this.preservingScroll(() => ctx.snippets.reload(p))
+        this.keptVersion.delete(p)
+        toast(t('workspace.reloadedExternal', { name: basename(p) }))
+        reloaded = true
+      }
+      this.refreshDirty()
+      if (reloaded) await ctx.reloadProject?.()
+    } finally {
+      if (this.checkingSince === since) this.checking = false
     }
-    this.refreshDirty()
   }
 
+  /** "Changed outside the editor while you have unsaved changes": true = reload. */
+  private async askReload(path: string): Promise<boolean> {
+    const r = await choiceDialog(t('workspace.fileChangedTitle'), t('workspace.changedOutsideMessage', { path }), [
+      { label: t('workspace.keepMine'), value: 'keep', primary: true },
+      { label: t('workspace.reloadLose'), value: 'reload', danger: true },
+    ])
+    return r === 'reload'
+  }
+
+  /** Runs `fn` keeping the scroll position of the active tab. */
+  private async preservingScroll(fn: () => Promise<void> | void) {
+    const view = this.active?.container
+    const top = view?.scrollTop ?? 0
+    await fn()
+    if (view) requestAnimationFrame(() => { view.scrollTop = top })
+  }
+
+  /** Reloads a topic from the disk, keeping the scroll position and the cursor. */
   async reloadTopic(d: Doc) {
     const file = await api.readFile(d.path)
+    const top = d.container.scrollTop
+    const { from, to } = d.editor.state.selection
     d.editor.commands.setContent(markdownToHtml(file.content), { emitUpdate: false })
+    const size = d.editor.state.doc.content.size
+    try {
+      d.editor.commands.setTextSelection({ from: Math.min(from, size), to: Math.min(to, size) })
+    } catch { /* position no longer valid */ }
+    requestAnimationFrame(() => { d.container.scrollTop = top })
     d.mtime = file.mtime
     d.baseline = serializeDoc(d.editor.state.doc)
     d.dirty = false
     this.renderTabs()
   }
 
+  /**
+   * Scrolls to an anchor: explicit heading id ({ #id }), id MkDocs generates from
+   * the heading text, or <a id>. Anchors inside the snippets shown by the page count.
+   */
   scrollToAnchor(doc: Doc, anchor: string) {
-    const ed = doc.editor
-    let target = -1
-    ed.state.doc.descendants((node, pos) => {
-      if (target >= 0) return false
-      if (node.type.name === 'anchor' && node.attrs.id === anchor) target = pos
-      else if (node.type.name === 'heading' && slugify(node.textContent) === anchor) target = pos + 1
-      return true
-    })
-    if (target < 0) { toast(t('workspace.anchorNotFound', { anchor })); return }
+    // The page and, after it, the snippet editors displayed in this tab.
+    const editors = [doc.editor, ...[...ctx.snippets.entries.values()]
+      .flatMap(e => [...e.editors]).filter(ed => !ed.isDestroyed && doc.container.contains(ed.view.dom))]
+    const all = docAnchors(...editors.map(ed => ed.state.doc))
+    const hit = all.find(a => a.id === anchor)
+    if (!hit) { toast(t('workspace.anchorNotFound', { anchor })); return }
+    const ed = editors[hit.doc]
+    const target = hit.pos + (hit.kind === 'anchor' ? 0 : 1)
     requestAnimationFrame(() => {
       ed.chain().focus().command(({ tr }) => { tr.setSelection(TextSelection.near(tr.doc.resolve(target))); return true }).run()
       const dom = ed.view.domAtPos(target).node as HTMLElement
       ;(dom.nodeType === 1 ? dom : dom.parentElement)?.scrollIntoView({ block: 'center' })
     })
   }
-}
-
-/** ID generated by the Python-Markdown toc extension. */
-export function slugify(text: string) {
-  return text.normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s-]/g, '').trim().toLowerCase().replace(/[-\s]+/g, '-')
 }

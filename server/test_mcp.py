@@ -51,7 +51,7 @@ init = rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "
 check("initialize", init["result"]["serverInfo"]["name"] == "mdeditor")
 rpc("notifications/initialized", notify=True)
 tools = [t["name"] for t in rpc("tools/list")["result"]["tools"]]
-check("14 tools", len(tools) == 14, tools)
+check("15 tools", len(tools) == 15, tools)
 
 info, err, _ = call("project_info")
 check("project_info", not err and info["topics"] == 8 and info["snippets"] == 4, info)
@@ -107,6 +107,12 @@ check("edit_toc add", not err and e["created"] == "Workflow-ExportResults.md" an
       and '<caption translate="true">Export results</caption>' in xml, e)
 _, err, txt = call("edit_toc", op="rename", id="0", caption="Home", expected_mtime=1.0)
 check("edit_toc conflict refused", err and "modified outside" in txt, txt)
+
+td, err, _ = call("list_todos")
+check("list_todos: case sensitive, code blocks excluded, HTML comments included",
+      not err and [(x["file"], x["line"]) for x in td["todos"]] == [("Workflow-CreateScenario.md", 8), ("Workflow-CreateScenario.md", 10)], td)
+td, _, _ = call("list_todos", filter="product")
+check("list_todos filter", td["count"] == 1 and "product team" in td["todos"][0]["text"], td)
 
 fr, err, _ = call("find_references", path="GeneralViews-BasicEditors.md")
 check("find_references", not err and fr["count"] == 2 and fr["links"][0]["file"] == "GeneralViews-Map.md", fr)

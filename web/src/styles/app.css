@@ -116,6 +116,7 @@ input, select, textarea { font: inherit; color: var(--fg-strong); }
 body.resizing-panel { cursor: col-resize; user-select: none; }
 body.resizing-panel iframe, body.resizing-panel .md-content { pointer-events: none; }
 /* Narrow left panel: tabs show their icon only (the label stays in the tooltip). */
+@container (max-width: 420px) { .side-tab:not(.on) .side-tab-label { display: none; } }
 @container (max-width: 270px) { .side-tab-label { display: none; } }
 .filter {
   margin: 8px; padding: 6px 9px; border-radius: var(--radius);
@@ -430,3 +431,18 @@ body.resizing-panel iframe, body.resizing-panel .md-content { pointer-events: no
 .ref-item .icon { color: var(--fg-dim); }
 .ref-item .line { color: var(--fg-dim); font: 11px var(--mono); }
 .ref-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--fg-dim); font: 11px var(--mono); padding-left: 6px; }
+
+/* TODO panel (app/todos.ts). Rows: flex none, the panel scrolls. */
+.todo-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.todo-head { display: flex; gap: 4px; align-items: center; padding: 8px; border-bottom: 1px solid var(--border); flex: none; }
+.todo-head .filter { flex: 1; min-width: 0; }
+.todo-list { flex: 1; min-height: 0; overflow: auto; }
+.todo-list > * { flex: none; }
+.todo-file .search-file-name .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.todo-hit { align-items: baseline; }
+.todo-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.todo-text .todo-mark { color: #f0b545; font-weight: 700; }
+[data-theme="light"] .todo-text .todo-mark { color: #9a5b00; }
+.badge-count.todo:not(:empty) { background: #b97c12; }
+.export-path { word-break: break-all; }
+.export-warnings pre { max-height: 200px; overflow: auto; font-size: 11px; white-space: pre-wrap; }

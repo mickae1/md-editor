@@ -104,15 +104,45 @@ export async function imageDialog(attrs: ImageAttrs & { naturalWidth?: number; n
   return { src: src.value.trim(), alt: alt.value, width: width.value || null, height: height.value || null, title: title.value || null }
 }
 
-export async function linkDialog(init: { text: string; href: string; showText: boolean }, topics: string[]): Promise<{ text: string; href: string } | 'remove' | null> {
+export interface LinkAnchor { id: string; label: string }
+
+/**
+ * Link dialog. The target field suggests the topics, and the anchors of a page
+ * as soon as it contains "#": `anchors('')` for the current page, `anchors(file)` for another one.
+ */
+export async function linkDialog(
+  init: { text: string; href: string; showText: boolean },
+  topics: string[],
+  anchors?: (file: string) => Promise<LinkAnchor[]>,
+): Promise<{ text: string; href: string } | 'remove' | null> {
   const listId = 'dl-topics'
   const text = h('input', { type: 'text', value: init.text })
   const href = h('input', { type: 'text', value: init.href, list: listId, placeholder: t('dialogs.linkPlaceholder') })
+  const list = h('datalist', { id: listId })
+  const showTopics = () => list.replaceChildren(...topics.map(topic => h('option', { value: topic })))
+  showTopics()
+  // Suggestions follow the file part of the target ("Topic.md#..." or "#...").
+  let shownFile: string | null = null
+  const refresh = async () => {
+    const v = href.value
+    const i = v.indexOf('#')
+    if (!anchors || i < 0) { if (shownFile !== null) { shownFile = null; showTopics() } return }
+    const file = v.slice(0, i)
+    if (file === shownFile) return
+    shownFile = file
+    let found: LinkAnchor[] = []
+    try { found = await anchors(file) } catch { /* unknown file */ }
+    if (shownFile !== file) return // the field changed meanwhile
+    list.replaceChildren(...found.map(a => h('option', { value: `${file}#${a.id}`, label: a.label || `#${a.id}` })))
+  }
+  href.addEventListener('input', () => { void refresh() })
+  void refresh()
   const body = h('div', { class: 'form' },
     init.showText ? h('label', null, t('dialogs.linkText'), text) : null,
     h('label', null, t('dialogs.linkTarget'), href),
     h('div', { class: 'hint' }, t('dialogs.linkHint')),
-    h('datalist', { id: listId }, ...topics.map(topic => h('option', { value: topic }))))
+    anchors ? h('div', { class: 'hint' }, t('dialogs.linkAnchorsHint')) : null,
+    list)
   const buttons: ModalButton[] = [{ label: t('dialogs.cancel'), value: 'cancel' }]
   if (init.href) buttons.push({ label: t('dialogs.removeLink'), value: 'remove', danger: true })
   buttons.push({ label: t('dialogs.ok'), value: 'ok', primary: true })

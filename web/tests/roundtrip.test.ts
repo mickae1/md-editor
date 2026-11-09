@@ -72,11 +72,68 @@ const cases: [string, string, string?][] = [
   ['bold+italic', '***x*** and **a *b* c**\n'],
   ['inline code', 'Use `a*b` here\n'],
   ['attr_list title', '## Title {#my-id}\n'],
+  ['mailto Markdown link', 'Contact [Toto](mailto:toto@toto.fr).\n'],
+  ['mailto autolink kept', 'Contact <mailto:toto@toto.fr>.\n'],
+  ['email autolink kept', 'Contact <toto@toto.fr>.\n'],
+  ['URL autolink kept', 'See <https://example.com/a_b>.\n'],
+  ['HTML mailto link kept', 'Contact <a href="mailto:toto@toto.fr?subject=Help">toto@toto.fr</a>.\n'],
+  ['HTML link with other attributes kept', 'Open <a class="ext" href="https://example.com" target="_blank">the **site**</a>.\n'],
+  ['plain mailto text stays text', 'Write to mailto:toto@toto.fr directly.\n'],
+  ['heading id (spec format)', '## Dates selection { #creatanalyss2 }\n'],
+  ['heading id compact kept', '### ACC Demand Overloads {#accoverloads}\n'],
+  ['heading id with marks', '## **Bold** and `code` title { #b-1 }\n'],
+  ['heading literal braces escaped', '## Escaped \\{#nope}\n'],
+  ['heading with only an id', '## { #only-id }\n'],
+  ['heading id in an admonition', '!!! note\n\n    ## Inside { #inside }\n'],
   ['disabled snippet', ';--8<-- "x.md"\n'],
 ]
 for (const [name, src, expected] of cases) {
   const out = roundtrip(src)
   check(name, out === (expected ?? src), `expected:\n${expected ?? src}\ngot:\n${out}`)
+}
+
+// 3. Heading anchor ids ({ #id }): not part of the visible text, written back at the end
+{
+  const ed = new Editor({ extensions: buildExtensions({ docPath: 'index.md', ancestors: [] }), content: markdownToHtml('## Dates selection { #creatanalyss2 }\n') })
+  const h = ed.state.doc.firstChild!
+  check('heading id: not in the visible text', h.textContent === 'Dates selection', h.textContent)
+  check('heading id: kept as an attribute', h.attrs.id === 'creatanalyss2', String(h.attrs.id))
+  // Enter in the middle of the heading: the id stays on the first part only.
+  ed.commands.setTextSelection(6)
+  ed.commands.splitBlock()
+  const out = serializeDoc(ed.state.doc)
+  check('heading id: not duplicated when splitting', (out.match(/\{ #creatanalyss2 \}/g) ?? []).length === 1, out)
+  ed.destroy()
+
+  const ed2 = new Editor({ extensions: buildExtensions({ docPath: 'index.md', ancestors: [] }), content: '<h2 data-heading-id="new-id">Title</h2><h3>Plain</h3>' })
+  check('heading id: new id written in the spec format', serializeDoc(ed2.state.doc) === '## Title { #new-id }\n\n### Plain\n', serializeDoc(ed2.state.doc))
+  ed2.commands.command(({ tr }) => { tr.setNodeMarkup(0, undefined, { ...tr.doc.firstChild!.attrs, id: null }); return true })
+  check('heading id: removed', serializeDoc(ed2.state.doc) === '## Title\n\n### Plain\n', serializeDoc(ed2.state.doc))
+  ed2.destroy()
+}
+
+// 3b. HTML links are real links (not raw HTML) and keep their form
+{
+  const ed = new Editor({ extensions: buildExtensions({ docPath: 'index.md', ancestors: [] }), content: markdownToHtml('Contact <a href="mailto:toto@toto.fr">Toto</a>.\n') })
+  let link: { href: string; text: string } | null = null
+  ed.state.doc.descendants(n => { const m = n.marks.find(x => x.type.name === 'link'); if (m) link = { href: m.attrs.href, text: n.text ?? '' }; return true })
+  check('HTML mailto link: editable link, no raw HTML', JSON.stringify(link) === JSON.stringify({ href: 'mailto:toto@toto.fr', text: 'Toto' }) && !JSON.stringify(ed.getJSON()).includes('rawInline'), JSON.stringify(ed.getJSON()))
+  // Changing the target of an HTML link writes a new <a href> tag.
+  ed.commands.setTextSelection({ from: 10, to: 12 })
+  ed.chain().extendMarkRange('link').updateAttributes('link', { href: 'mailto:other@toto.fr' }).run()
+  check('HTML link: new target written', serializeDoc(ed.state.doc) === 'Contact <a href="mailto:other@toto.fr">Toto</a>.\n', serializeDoc(ed.state.doc))
+  ed.destroy()
+}
+
+// 4. Anchors computed like MkDocs (same rules as markdown_anchors() in server/app.py)
+{
+  const { docAnchors, slugify } = await import('../src/markdown/anchors.ts')
+  const md = '# Analysis\n\n## Dates selection { #creatanalyss2 }\n\n## Dates selection\n\n## Dates selection\n\n## Élan & **bold**\n\n<a id="intro"></a> text\n'
+  const ed = new Editor({ extensions: buildExtensions({ docPath: 'index.md', ancestors: [] }), content: markdownToHtml(md) })
+  const ids = docAnchors(ed.state.doc).map(a => a.id).join(' ')
+  check('anchors: explicit, generated, unique suffixes, <a id>', ids === 'analysis creatanalyss2 dates-selection dates-selection_1 elan-bold intro', ids)
+  check('anchors: slugify like Python-Markdown', slugify(' Hello, World — v2.0! ') === 'hello-world-v20', slugify(' Hello, World — v2.0! '))
+  ed.destroy()
 }
 
 console.log(failures ? `\n${failures} failure(s)` : '\nAll OK')

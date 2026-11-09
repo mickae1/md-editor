@@ -230,3 +230,21 @@
 .tabbed-block > .block-body > :first-child { margin-top: 0; }
 .block-header select, .block-header input { field-sizing: content; }
 .admonition .adm-title { min-width: 120px; }
+
+/* Heading anchor id ({ #id }): a discreet badge, outside the editable text. */
+.md-content [data-heading-id]::after {
+  content: '#' attr(data-heading-id);
+  margin-left: .6em; padding: 1px 6px; vertical-align: middle;
+  font: 500 11px/1.5 'Roboto Mono', monospace; letter-spacing: 0;
+  color: var(--md-fg); opacity: .55;
+  border: 1px solid var(--md-table-border); border-radius: 4px;
+  user-select: none; pointer-events: none;
+}
+.md-content [data-heading-id]:hover::after { opacity: .9; }
+
+/* TODO markers (editor/todo.ts) */
+.md-content .todo-mark {
+  background: rgba(230, 160, 40, .22); color: #f0b545; font-weight: 700;
+  border-radius: 3px; padding: 0 2px; box-shadow: 0 0 0 1px rgba(230, 160, 40, .45);
+}
+[data-theme="light"] .md-content .todo-mark { color: #9a5b00; background: rgba(230, 160, 40, .25); }

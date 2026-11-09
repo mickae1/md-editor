@@ -21,19 +21,18 @@ import { SnippetsPanel, showUsage } from './app/snippetsPanel'
 import { Toolbar } from './app/toolbar'
 import { BrokenLinksView, SearchView, projectSettings, showDiff, showSource } from './app/views'
 import * as cmd from './app/commands'
+import { TodoView } from './app/todos'
+import { exportProject } from './app/exportDialog'
 import { i18n, t } from './i18n'
 import { makeResizable } from './app/resize'
+import { hideLoading, setLoadingText, showLoading } from './loading'
+import { fetchSession, flushUi, prefs, saveSession, scheduleSessionSave, setSessionSource, takeStartSession, type Session, type SessionTab } from './session'
 
-// --------------------------------------------------------------------------
-// Local preferences (convenience only)
-// --------------------------------------------------------------------------
 // Placeholder of an empty paragraph (content.css), as a CSS string.
 document.documentElement.style.setProperty('--empty-placeholder', JSON.stringify(t('editor.emptyPlaceholder')))
 
-const pref = {
-  get(key: string, def: string) { try { return localStorage.getItem(`mdeditor.${key}`) ?? def } catch { return def } },
-  set(key: string, v: string) { try { localStorage.setItem(`mdeditor.${key}`, v) } catch { /* unavailable */ } },
-}
+// Global UI preferences, kept by the server (see session.ts: never localStorage).
+const pref = prefs
 
 // --------------------------------------------------------------------------
 // Layout
@@ -56,7 +55,11 @@ async function closeFile(path: string) {
   return !ws.find(path)
 }
 const tocBadge = h('span', { class: 'badge-count' })
-const tocPanel = new TocPanel({ closeFile, onBroken: n => { tocBadge.textContent = n ? String(n) : '' } })
+const tocPanel = new TocPanel({ closeFile, onBroken: n => { tocBadge.textContent = n ? String(n) : '' }, onExpandChange: () => scheduleSessionSave() })
+explorer.onExpandChange = () => scheduleSessionSave()
+const todoBadge = h('span', { class: 'badge-count todo' })
+const todoView = new TodoView()
+todoView.onCount(n => { todoBadge.textContent = n ? String(n) : '' })
 const brokenView = new BrokenLinksView({ addToToc: path => { void tocPanel.addOrphan(path) }, closeFile })
 const toolbar = new Toolbar({ showDiff: () => showDiff(ws), showSource: () => showSource(ws) })
 const snippetsPanel = new SnippetsPanel({
@@ -65,23 +68,24 @@ const snippetsPanel = new SnippetsPanel({
   extract: () => cmd.extractSnippet(),
 })
 
-type SideView = 'files' | 'toc' | 'search' | 'broken'
-const sideViews: Record<SideView, HTMLElement> = { files: explorer.el, toc: tocPanel.el, search: searchView.el, broken: brokenView.el }
+type SideView = 'files' | 'toc' | 'search' | 'broken' | 'todo'
+const sideViews: Record<SideView, HTMLElement> = { files: explorer.el, toc: tocPanel.el, search: searchView.el, broken: brokenView.el, todo: todoView.el }
 const sideContent = h('div', { class: 'side-content' })
 const sideTabs = h('div', { class: 'side-tabs' })
 let currentSide: SideView = 'files'
 function showSide(v: SideView, remember = true) {
   currentSide = v
-  if (remember) pref.set('side', v)
+  if (remember) { pref.set('side', v); scheduleSessionSave() }
   sideContent.replaceChildren(sideViews[v])
   sideTabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.view === v))
   if (v === 'broken') brokenView.render()
   if (v === 'search') searchView.focus()
   if (v === 'toc') tocPanel.render()
+  if (v === 'todo') void todoView.load()
 }
 const sideTab = (v: SideView, name: Parameters<typeof icon>[0], label: string, title = label) =>
   h('button', { class: 'side-tab', dataset: { view: v }, title, onclick: () => showSide(v) }, h('span', { class: 'side-tab-icon' }, icon(name, 16)), h('span', { class: 'side-tab-label' }, label))
-sideTabs.append(sideTab('files', 'folder', t('main.tabFiles')), sideTab('toc', 'tree', t('main.tabToc'), t('main.tabTocTooltip')), sideTab('search', 'search', t('main.tabSearch')), sideTab('broken', 'brokenLink', t('main.tabLinks')))
+sideTabs.append(sideTab('files', 'folder', t('main.tabFiles')), sideTab('toc', 'tree', t('main.tabToc'), t('main.tabTocTooltip')), sideTab('search', 'search', t('main.tabSearch')), sideTab('broken', 'brokenLink', t('main.tabLinks')), sideTab('todo', 'todo', t('todos.tab'), t('todos.tabTitle')))
 
 const projectName = h('span', { class: 'project-name' })
 const statusLeft = h('span')
@@ -90,6 +94,7 @@ const brokenBadge = h('span', { class: 'badge-count' })
 // Badges over the icon (four tabs share 280px).
 sideTabs.querySelector('[data-view="broken"] .side-tab-icon')?.append(brokenBadge)
 sideTabs.querySelector('[data-view="toc"] .side-tab-icon')?.append(tocBadge)
+sideTabs.querySelector('[data-view="todo"] .side-tab-icon')?.append(todoBadge)
 
 const leftPanel = h('aside', { class: 'side left' }, sideTabs, sideContent)
 const rightPanel = h('aside', { class: 'side right' }, snippetsPanel.el)
@@ -101,6 +106,7 @@ const titlebar = h('header', { class: 'titlebar' },
   hbtn('search', t('main.openTopicTooltip'), () => quickOpen()),
   hbtn('save', t('main.saveTooltip'), () => saveActive()),
   hbtn('play', t('main.buildPreviewTooltip'), () => buildPreview()),
+  hbtn('download', t('export.menu'), e => exportMenu(e)),
   hbtn('settings', t('main.projectSettings'), () => projectSettings()),
   hbtn('panelLeft', t('main.toggleExplorer'), () => togglePanel(leftPanel, 'left')),
   hbtn('panelRight', t('main.toggleSnippets'), () => togglePanel(rightPanel, 'right')),
@@ -204,6 +210,7 @@ ctx.reloadProject = async () => {
   try { applyProjectInfo(await api.project()) } catch { /* ignore */ }
 }
 ctx.setProject = async (info, keepTabs = false) => {
+  if (!keepTabs) sessionReady = false // the session of the new folder is restored by the caller
   const reopen = keepTabs ? ws.docs.map(d => d.path) : []
   const active = ws.active?.path
   ws.closeAll()
@@ -224,6 +231,7 @@ function applyProjectInfo(info: ProjectInfo | null) {
   snippetsPanel.render()
   if (currentSide === 'broken') brokenView.render()
   void tocPanel.load()
+  void todoView.load()
   if (info && !sideRestored) {
     sideRestored = true
     if (currentSide === 'toc' && !info.tocFile) showSide('files', false)
@@ -237,12 +245,108 @@ function applyProjectInfo(info: ProjectInfo | null) {
 }
 
 ws.onChange(() => {
-  explorer.setActive(ws.active?.path ?? null)
-  tocPanel.setActive(ws.active?.path ?? null)
+  // Opening a topic from elsewhere (link, quick open, the other tree...) reveals it in
+  // the trees; not while the session is restored (its expanded nodes are kept as they were).
+  explorer.setActive(ws.active?.path ?? null, !restoring)
+  tocPanel.setActive(ws.active?.path ?? null, !restoring)
   snippetsPanel.render()
   updateStatus()
   toolbar.update()
+  if (ws.active && !restoring) applySavedScroll(ws.active)
+  scheduleSessionSave()
 })
+
+// --------------------------------------------------------------------------
+// Session: open tabs, scroll, expanded tree nodes (saved per project by the server)
+// --------------------------------------------------------------------------
+/** True while a session is being restored: no reveal, no save. */
+let restoring = false
+/** False until the session of the current folder is restored (avoids saving an empty one over it). */
+let sessionReady = false
+/** Last scroll position of each tab (a hidden tab, display: none, loses its own). */
+const scrollByPath = new Map<string, number>()
+/** Saved scroll positions not applied yet (tabs not shown since the restore). */
+const pendingScroll = new Map<string, SessionTab>()
+
+editorArea.addEventListener('scroll', e => {
+  const d = ws.docs.find(x => x.container === e.target)
+  if (!d || d !== ws.active || pendingScroll.has(d.path)) return
+  scrollByPath.set(d.path, d.container.scrollTop)
+  scheduleSessionSave()
+}, true)
+
+/** Scrolls a restored tab where it was, after layout and again once its images are loaded. */
+function applySavedScroll(doc: (typeof ws.docs)[number]) {
+  const tab = pendingScroll.get(doc.path)
+  if (!tab || doc.container.dataset.restoring) return
+  doc.container.dataset.restoring = '1'
+  let stop = false
+  const done = () => {
+    if (doc.container.dataset.restoring !== '1') return
+    delete doc.container.dataset.restoring
+    pendingScroll.delete(doc.path)
+    scrollByPath.set(doc.path, doc.container.scrollTop)
+  }
+  // The user takes over: no more automatic scrolling.
+  const cancel = () => { stop = true; done() }
+  for (const ev of ['wheel', 'pointerdown', 'keydown']) doc.container.addEventListener(ev, cancel, { once: true, passive: true })
+  const apply = () => { if (!stop && ws.active === doc && doc.container.isConnected) doc.container.scrollTop = tab.scroll }
+  requestAnimationFrame(() => requestAnimationFrame(apply))
+  doc.container.querySelectorAll('img').forEach(img => { if (!img.complete) img.addEventListener('load', apply, { once: true }) })
+  window.setTimeout(apply, 300)
+  window.setTimeout(() => { apply(); done() }, 1000)
+}
+
+setSessionSource(() => {
+  const p = ctx.project
+  if (!p || !sessionReady || restoring) return null
+  const session: Session = {
+    tabs: ws.docs.map(d => {
+      const { from, to } = d.editor.state.selection
+      const scroll = pendingScroll.get(d.path)?.scroll ?? (d === ws.active ? d.container.scrollTop : scrollByPath.get(d.path) ?? 0)
+      return { path: d.path, scroll: Math.round(scroll), sel: [from, to] }
+    }),
+    active: ws.active?.path ?? null,
+    explorer: explorer.expandedKeys(),
+    toc: tocPanel.expandedKeys(),
+    tocOrphans: tocPanel.orphansExpanded,
+    side: currentSide,
+  }
+  return { root: p.root, session }
+})
+
+/** Reopens the tabs and restores the tree states of a session (current folder). */
+async function restoreSession(s: Session | null) {
+  restoring = true
+  pendingScroll.clear()
+  scrollByPath.clear()
+  try {
+    explorer.setExpanded(Array.isArray(s?.explorer) ? s.explorer : [])
+    tocPanel.setExpanded(Array.isArray(s?.toc) ? s.toc : [], s?.tocOrphans ?? true)
+    const side = s?.side as SideView | undefined
+    if (side && side in sideViews && (side !== 'toc' || ctx.project?.tocFile)) showSide(side, false)
+    // Files deleted since are skipped silently.
+    const tabs = (Array.isArray(s?.tabs) ? s.tabs : []).filter(x => typeof x?.path === 'string' && fileSet.has(x.path))
+    for (const tab of tabs) {
+      pendingScroll.set(tab.path, tab)
+      await ws.open(tab.path)
+      const d = ws.find(tab.path)
+      if (!d) { pendingScroll.delete(tab.path); continue }
+      if (Array.isArray(tab.sel)) {
+        const size = d.editor.state.doc.content.size
+        try { d.editor.commands.setTextSelection({ from: Math.min(tab.sel[0], size), to: Math.min(tab.sel[1], size) }) } catch { /* no longer valid */ }
+      }
+    }
+    const active = (s?.active && ws.find(s.active)) || ws.docs[ws.docs.length - 1]
+    if (active) ws.activate(active)
+  } catch (e) {
+    console.warn('Session restore failed', e)
+  } finally {
+    restoring = false
+    sessionReady = true
+  }
+  if (ws.active) applySavedScroll(ws.active)
+}
 
 function updateStatus() {
   const d = ws.active
@@ -272,15 +376,28 @@ async function openFolderDialog() {
   if (r.path) await openProject(r.path)
 }
 
-async function openProject(path: string) {
+/**
+ * Opens a folder (its scan can take a few seconds) behind the loading overlay,
+ * then restores its session. `startup`: the startup overlay is already shown,
+ * and a failure falls back to the start screen without a dialog.
+ */
+async function openProject(path: string, startup = false) {
+  await saveSession() // the folder being left
+  const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path
+  if (startup) setLoadingText(t('loading.opening', { name }))
+  else showLoading(t('loading.opening', { name }))
+  let error = ''
   try {
     const info = await api.openProject(path)
     await ctx.setProject!(info)
-    const last = pref.get(`last.${info.root}`, '')
-    if (last && fileSet.has(last)) ctx.openFile(last)
+    await restoreSession(await fetchSession())
   } catch (e) {
-    await alertDialog(t('main.openFolder'), (e as Error).message)
+    error = (e as Error).message
+  } finally {
+    if (!startup) hideLoading()
   }
+  if (error && startup) applyProjectInfo(null)
+  else if (error) await alertDialog(t('main.openFolder'), error)
 }
 
 async function saveActive() {
@@ -295,6 +412,14 @@ async function quickOpen() {
     items: ctx.project.files.map(f => ({ label: f.path.replace(/\.md$/, ''), value: f.path, badge: f.kind === 'snippet' ? 'snippet' : undefined })),
   })
   if (picked) ctx.openFile(picked.value)
+}
+
+function exportMenu(e: MouseEvent) {
+  const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  popupMenu(r.left - 150, r.bottom + 4, [
+    { label: t('export.siteMenu'), icon: icon('globe', 14), disabled: !ctx.project, action: () => { void exportProject('site') } },
+    { label: t('export.pdfMenu'), icon: icon('file', 14), disabled: !ctx.project, action: () => { void exportProject('pdf') } },
+  ])
 }
 
 async function buildPreview() {
@@ -350,12 +475,32 @@ document.addEventListener('keydown', e => {
 // --------------------------------------------------------------------------
 window.addEventListener('beforeunload', e => {
   if (ws.anyDirty()) { e.preventDefault(); e.returnValue = '' }
-  if (ws.active) pref.set(`last.${ctx.project?.root}`, ws.active.path)
 })
-window.addEventListener('pagehide', () => navigator.sendBeacon('/api/bye'))
+window.addEventListener('pagehide', () => {
+  flushUi() // pending preferences and the session (unsaved changes are not part of it)
+  navigator.sendBeacon('/api/bye')
+})
 const ping = () => fetch('/api/ping').catch(() => undefined)
 ping()
 setInterval(ping, 20_000)
-window.addEventListener('focus', () => { ws.checkExternalChanges(); ctx.reloadProject?.() })
+window.addEventListener('focus', () => { ctx.reloadProject?.() })
+ws.startWatching() // files changed outside the editor (Claude, Git...): every 2 s and on focus
 
-api.state().then(s => applyProjectInfo(s.project)).catch(() => applyProjectInfo(null))
+/**
+ * Startup (awaited by boot.ts behind the loading overlay): shows the folder
+ * opened by the server and restores its session, or reopens the folder of the
+ * last session when started without one.
+ */
+export async function start() {
+  let s: Awaited<ReturnType<typeof api.state>>
+  try { s = await api.state() } catch { applyProjectInfo(null); return }
+  if (s.project) {
+    setLoadingText(t('loading.opening', { name: s.project.name }))
+    applyProjectInfo(s.project)
+    await restoreSession(takeStartSession(s.project.root))
+  } else if (s.resume) {
+    await openProject(s.resume, true)
+  } else {
+    applyProjectInfo(null)
+  }
+}

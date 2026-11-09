@@ -27,7 +27,7 @@ from app import (  # noqa: E402
 import toc as toc_mod  # noqa: E402
 
 PROTOCOL_VERSION = "2025-06-18"
-SERVER_INFO = {"name": "mdeditor", "version": "1.0.0"}
+SERVER_INFO = {"name": "mdeditor", "version": "1.1.0"}
 
 INSTRUCTIONS = """MkDocs (pymdownx) documentation edited with mdEditor.
 - Paths are relative to the documentation folder (e.g. GeneralViews-Map.md, _snippets/snippets-map.md).
@@ -266,6 +266,13 @@ class Server:
                         return {"truncated": True, "count": len(hits), "hits": hits}
         return {"truncated": False, "count": len(hits), "hits": hits}
 
+    def t_list_todos(self, filter: str = ""):
+        todos = self.proj().todos()
+        words = filter.lower().split()
+        if words:
+            todos = [x for x in todos if all(w in (x["file"] + " " + x["text"]).lower() for w in words)]
+        return {"count": len(todos), "todos": todos}
+
     def t_find_references(self, path: str):
         proj = self.proj()
         try:
@@ -349,6 +356,8 @@ TOOLS = [
     ("search", "Text (or regex) search in the project's .md files.",
      schema({"query": STR, "regex": BOOL, "case_sensitive": BOOL, "kind": KIND}, ["query"]), True),
     ("check_links", "Broken internal links and snippet inclusions, and orphan files: topics linked from no other file and absent from the table of contents, snippets included nowhere.", schema({}), True),
+    ("list_todos", "Every TODO (case sensitive, whole word) left in the .md files, outside code blocks: file, line, text. Optional filter on file and text.",
+     schema({"filter": {"type": "string", "description": "words to find in the file path or the line"}}), True),
     ("find_references", "Everything that points to a file: links and snippet inclusions (file and line) from the other pages, and table of contents entries. Check it before deleting or renaming a file.",
      schema({"path": STR}, ["path"]), True),
     ("get_toc", "Table of contents (site navigation): tree of nodes {id, caption, href, children}, broken nodes, orphan topics not in the menu.", schema({}), True),

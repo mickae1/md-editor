@@ -195,7 +195,15 @@ yml = tmp / "material.yml"
 yml.write_text("theme:\n  name: material\n  palette:\n    - scheme: default\n      primary: indigo\n    - scheme: slate\n", encoding="utf-8")
 check("color schemes: default + slate", detect_color_schemes(yml) == {"dark": "slate", "light": "default"})
 
-# 14. No table of contents
+# 14. TODO markers
+from app import TODO_RE  # noqa: E402
+check("TODO: whole word, case sensitive", [bool(TODO_RE.search(x)) for x in ["TODO: x", "a TODO.", "(TODO)", "todo", "Todo", "TODOS", "MYTODO", "TODO_1"]]
+      == [True, True, True, False, False, False, False, False])
+(md / "Notes.md").write_text("# Notes\n\nTODO one\n\n```\nTODO in code\n```\n\n<!-- TODO two -->\n", encoding="utf-8")
+notes = [(x["line"], x["column"]) for x in Project(md, {}).todos() if x["file"] == "Notes.md"]
+check("TODO: lines and columns, fenced code skipped", notes == [(3, 1), (9, 6)], notes)
+
+# 15. No table of contents
 other = tmp / "Empty"
 other.mkdir()
 check("no TOC: empty state", Project(other, {}).toc_state()["path"] is None)

@@ -31,8 +31,13 @@ function block(node: PMNode): string {
   switch (node.type.name) {
     case 'paragraph':
       return escapeLineStart(inline(node).trim())
-    case 'heading':
-      return `${'#'.repeat(node.attrs.level)} ${inline(node).trim()}`
+    case 'heading': {
+      // Literal "{#x}" at the end of the text: escaped, so that it is not read back as an id.
+      const text = inline(node).trim().replace(/\{(\s*#[A-Za-z0-9_-]+\s*\}\s*)$/, '\\{$1')
+      const id: string | null = node.attrs.id
+      const attr = id ? (node.attrs.idCompact ? `{#${id}}` : `{ #${id} }`) : ''
+      return [`${'#'.repeat(node.attrs.level)}`, text, attr].filter(Boolean).join(' ')
+    }
     case 'bulletList':
     case 'orderedList':
       return list(node)
@@ -144,9 +149,21 @@ function open(mark: Mark, codeText = ''): string {
     case 'bold': return '**'
     case 'italic': return '*'
     case 'code': return codeFence(codeText)
-    case 'link': return '['
+    case 'link': return htmlLinkTag(mark) ?? '['
     default: return ''
   }
+}
+
+/**
+ * Original <a ...> tag of a link written in HTML, as long as its target was not
+ * changed (otherwise a new <a href> tag); null for a Markdown link.
+ */
+function htmlLinkTag(mark: Mark): string | null {
+  if (mark.attrs.format !== 'html') return null
+  const tag: string = mark.attrs.html ?? ''
+  const original = /href\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1]
+  const same = original !== undefined && original.replace(/&amp;/g, '&') === mark.attrs.href
+  return same ? tag : `<a href="${attr(mark.attrs.href)}">`
 }
 
 function close(mark: Mark, codeText = ''): string {
@@ -155,6 +172,7 @@ function close(mark: Mark, codeText = ''): string {
     case 'italic': return '*'
     case 'code': return codeFence(codeText)
     case 'link': {
+      if (mark.attrs.format === 'html') return '</a>'
       let href: string = mark.attrs.href ?? ''
       if (/[\s()<>]/.test(href)) href = `<${href}>`
       const title = mark.attrs.title ? ` "${String(mark.attrs.title).replace(/"/g, '\\"')}"` : ''
@@ -202,6 +220,14 @@ export function inline(parent: PMNode): string {
     marks.filter(m => MARK_ORDER.includes(m.type.name))
       .sort((a, b) => MARK_ORDER.indexOf(a.type.name) - MARK_ORDER.indexOf(b.type.name))
 
+  // Text of a link run (consecutive nodes carrying the same link mark).
+  const linkRun = (from: number, mark: Mark) => {
+    let j = from
+    let s = ''
+    while (j < children.length && mark.isInSet(children[j].marks)) s += children[j++].text ?? ''
+    return { text: s, end: j }
+  }
+
   // Full text of a code run (over several consecutive nodes).
   const codeRun = (from: number) => {
     let s = ''
@@ -237,6 +263,18 @@ export function inline(parent: PMNode): string {
     active = active.slice(0, keep)
     out += pendingSpace + lead
     pendingSpace = ''
+
+    // Autolink whose text is still its target: <https://...>, <mailto:...>, <name@host>.
+    const auto = marks.find(m => m.type.name === 'link' && m.attrs.format === 'auto' && !m.isInSet(active))
+    if (auto) {
+      const run = linkRun(i, auto)
+      const href: string = auto.attrs.href ?? ''
+      if (run.text && (run.text === href || `mailto:${run.text}` === href) && !/[\s<>]/.test(run.text)) {
+        out += `<${run.text}>`
+        i = run.end - 1
+        continue
+      }
+    }
 
     for (const m of marks) {
       if (!m.isInSet(active)) {

@@ -1,4 +1,6 @@
-# Create an "mdEditor" shortcut on the Desktop and in the Start menu.
+# Create an "mdEditor" shortcut on the Desktop and in the Start menu, for the SOURCE version
+# (runs mdeditor.pyw with the installed Python).
+# For the compiled version, use install.ps1 from the release zip instead (installer/install.ps1).
 # Usage: right-click > Run with PowerShell  (or: powershell -ExecutionPolicy Bypass -File install-shortcut.ps1)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path

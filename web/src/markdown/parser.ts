@@ -5,6 +5,7 @@
 // back. Unknown HTML is kept as is in "raw" nodes so that nothing is lost
 // on save.
 import markdownIt, { type MarkdownIt, type StateBlock, type StateCore, type Token } from 'markdown-it'
+import { HEADING_ID_RE } from './anchors'
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -125,6 +126,41 @@ function groupTabs(state: StateCore) {
   state.tokens = out
 }
 
+/**
+ * attr_list id at the end of a heading ("## Title { #my-id }"): removed from the
+ * text before inline parsing and kept as data-heading-id. data-heading-id-compact
+ * remembers the "{#my-id}" spelling so that unchanged headings are written back as is.
+ */
+function headingIds(state: StateCore) {
+  const tokens = state.tokens
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (tokens[i].type !== 'heading_open' || tokens[i + 1].type !== 'inline') continue
+    const inline = tokens[i + 1]
+    const m = HEADING_ID_RE.exec(inline.content)
+    if (!m) continue
+    inline.content = inline.content.slice(0, m.index + m[1].length).replace(/\s+$/, '')
+    tokens[i].attrSet('data-heading-id', m[2])
+    if (!/\{\s/.test(m[0])) tokens[i].attrSet('data-heading-id-compact', '1')
+  }
+}
+
+/** Opening <a ...href="..."...> tag (not an <a id> anchor). */
+const HTML_LINK_OPEN = /^<a\s(?:[^>]*\s)?href\s*=\s*["']([^"']*)["'][^>]*>$/i
+
+/** Index of the </a> closing the HTML link opened at `idx` in the same inline run, or -1. */
+function htmlLinkClose(tokens: Token[], idx: number): number {
+  for (let j = idx + 1; j < tokens.length; j++) {
+    const t = tokens[j]
+    if (t.type !== 'html_inline') continue
+    if (/^<\/a\s*>$/i.test(t.content)) return j
+    if (/^<a[\s>]/i.test(t.content)) return -1 // nested link: leave both as raw HTML
+  }
+  return -1
+}
+
+const decodeEntities = (s: string) =>
+  s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+
 const INLINE_HTML_ONLY = /^(\s*(<img\b[^>]*>|<br\s*\/?>|<a\s+(?:id|name)="[^"]*"\s*>\s*<\/a>)\s*)+$/i
 const ANCHOR_OPEN = /^<a\s+(?:id|name)="([^"]*)"\s*>$/i
 
@@ -136,6 +172,7 @@ function createMarkdownIt(): MarkdownIt {
   md.block.ruler.before('fence', 'admonition', containerRule('admonition', ADMONITION_LINE), { alt: ['paragraph', 'reference', 'blockquote', 'list'] })
   md.block.ruler.before('fence', 'tab', containerRule('tab', TAB_LINE), { alt: ['paragraph', 'reference', 'blockquote', 'list'] })
   md.core.ruler.push('group_tabs', groupTabs)
+  md.core.ruler.after('block', 'heading_ids', headingIds)
 
   const r = md.renderer.rules
 
@@ -171,9 +208,26 @@ function createMarkdownIt(): MarkdownIt {
     return `<div data-raw-block="${esc(content.replace(/\n+$/, ''))}"></div>\n`
   }
 
+  // Autolinks (<https://...>, <mailto:...>, <name@host>): written back in the same form.
+  const linkOpen = r.link_open ?? ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
+  r.link_open = (tokens, idx, options, env, self) => {
+    if (tokens[idx].markup === 'autolink') tokens[idx].attrSet('data-link-format', 'auto')
+    return linkOpen(tokens, idx, options, env, self)
+  }
+
   r.html_inline = (tokens, idx) => {
     const t = tokens[idx]
     const html = t.content
+    // <a href="...">text</a> in HTML: an editable link, written back as HTML.
+    if (HTML_LINK_OPEN.test(html)) {
+      const close = htmlLinkClose(tokens, idx)
+      const href = HTML_LINK_OPEN.exec(html)![1]
+      if (close > 0) {
+        tokens[close].meta = { htmlLinkClose: true }
+        return `<a href="${esc(decodeEntities(href))}" data-link-format="html" data-html-tag="${esc(html)}">`
+      }
+    }
+    if (t.meta?.htmlLinkClose) return '</a>'
     if (/^<br\s*\/?>$/i.test(html)) return '<br>'
     if (/^<img\b/i.test(html)) return html
     const anchor = ANCHOR_OPEN.exec(html)

@@ -84,7 +84,7 @@ A `.md` file is never deleted silently while something still points to it.
 
 ## Interface
 
-- *Contents* panel (`web/src/app/toc.ts`): tree, drag and drop, inline rename (F2), context menu (add, duplicate, move, remove, delete), list of topics not in the table of contents, highlight of the active topic.
+- *Contents* panel (`web/src/app/toc.ts`): tree, drag and drop, inline rename (F2), context menu (add, duplicate, move, remove, delete), list of topics not in the table of contents, highlight of the active topic. Nodes are collapsed by default; the expanded ones (by `href`) are part of the session, and the ancestors of a topic opened from elsewhere are expanded (not during the session restore, nor for a click in the tree itself).
 - *Links* panel: broken links and orphan files.
 - Project settings: choice of the table of contents file.
 

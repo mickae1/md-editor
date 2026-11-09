@@ -68,3 +68,24 @@ Rendered as annotated HTML read by the TipTap nodes:
 - targeted format cases.
 
 The test replaces `ctx.snippets` with a fake store: snippets are not expanded, only the `--8<--` line is checked.
+
+## Heading identifiers (`{ #id }`)
+
+attr_list ids at the end of a heading line, `## Dates selection { #creatanalyss2 }` or `{#accoverloads}`:
+
+- **Parser**: the `heading_ids` core rule (before inline parsing) removes the id from the heading text. It sets `data-heading-id`, plus `data-heading-id-compact` for the `{#id}` spelling. `\{#x}` (escaped) stays text. The regex is `HEADING_ID_RE` in `web/src/markdown/anchors.ts`, the same as in `server/app.py`.
+- **Node**: `HeadingWithId` (`web/src/editor/heading.ts`) adds the `id` and `idCompact` attributes. A plugin keeps every id on one heading only: Enter in the middle of a heading and paste both copy attributes. The badge is a CSS `::after` (`content.css`), outside the editable text. The context menu edits the id, checks its characters and warns about duplicates.
+- **Serializer**: `## Title { #id }` (spec format), or `{#id}` when the heading was read that way. A literal `{#x}` at the end of a heading text is escaped (`\{#x}`).
+- **Anchors**: `docAnchors()` (TS) and `markdown_anchors()` (Python) compute the targets of a page like MkDocs. Explicit ids come first, then ids generated from the text (`slugify` of Python-Markdown's toc, `_1`, `_2` for duplicates), then `<a id>` anchors. They feed the link dialog, scrolling to an anchor and `/api/anchors`. Both implementations must stay identical.
+
+## Links
+
+The link mark (`web/src/editor/link.ts`) has a `format` attribute that keeps the original form:
+
+| Source | `format` | Saved as |
+|---|---|---|
+| `[text](target)` | none | `[text](target)` |
+| `<https://...>`, `<name@host>`, `<mailto:...>` | `auto` | the same autolink while its text is still its target, otherwise `[text](target)` |
+| `<a href="..." ...>text</a>` (inline HTML) | `html` | the original opening tag, with all its attributes, while the target is unchanged; otherwise `<a href="new">` |
+
+HTML links are real links in the editor, not raw HTML. Their text is still Markdown, as in Python-Markdown. An `<a>` without `href` (`<a id>`), or nested links, stay raw. Plain text such as `mailto:x@y` is not a link on the site, so it stays text.

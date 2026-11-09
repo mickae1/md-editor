@@ -11,10 +11,14 @@ Server and MCP messages (errors, warnings) are in English only; the UI translate
 | Route | Response |
 |---|---|
 | `/api/ping` | `{ok}`; keeps the window alive (watchdog) |
-| `/api/state` | `{project: ProjectInfo \| null, recent: string[], mkdocsAvailable}` |
+| `/api/state` | `{project: ProjectInfo \| null, recent: string[], resume: string \| null, mkdocsAvailable}`; `resume`: folder of the last session when the server was started without a folder (returned once) |
+| `/api/ui` | `{prefs: {key: string}, session: object \| null, root: string \| null}`: UI preferences and the session of the current folder |
 | `/api/project` | `ProjectInfo` (recomputes files, usages, broken links) |
 | `/api/file?path=` | `{path, content, mtime}`; BOM removed, CRLF → LF |
 | `/api/references?path=` | `{path, links: [{file, line, text}], includes: [...], toc: [{id, caption}], count}`: everything that points to the file |
+| `/api/anchors?path=` | `[{id, kind: explicit\|auto\|anchor, label}]`: link targets of a saved page, snippets expanded, in MkDocs order (explicit `{ #id }`, ids generated from the heading text with `_1` suffixes, `<a id>`) |
+| `/api/todos` | `[{file, kind, line, column, text}]`: every `TODO` (whole word, case sensitive), fenced code excluded, HTML comments included |
+| `/api/export` | `{mkdocs, out, pdf, hasToc, browser}`: default export locations and what is available |
 | `/api/toc` | `TocState`: `{path, abs, mtime, tree, orphans, broken}` (`path: null` when there is no table of contents); see [toc.md](toc.md) |
 | `/api/search?q=&regex=0\|1&case=0\|1` | `[{file, line, text}]`, 2000 results maximum |
 | `/api/i18n` | `{setting, language, languages: [{code, name}], messages}`; language chosen from the saved setting, else the browser's `Accept-Language`, else `en`; `messages` = `en` merged with the chosen language |
@@ -33,6 +37,10 @@ Server and MCP messages (errors, warnings) are in English only; the UI translate
 | `/api/file` | `{path, content, mtime?, force?, create?}` | normalized `{path, mtime, content}`; 409 `code: "conflict"` if `mtime` differs, `code: "exists"` if `create` and the file exists |
 | `/api/stat` | `{paths: []}` | `{path: mtime \| null}` |
 | `/api/file/delete` | `{path, force?}` | `{deleted}`; `.md` files of the project only; without `force`, 409 `code: "referenced"` + `references` if something still points to it |
+| `/api/export` | `{out, useToc}` | `{out, pages, index, contents, seconds, navFromToc, warnings}`; website, one `.html` per `.md` (see [build-release.md](build-release.md#exporting)); 400/409 `unsafe` / `not_empty` for the output folder |
+| `/api/export/pdf` | `{out, useToc}` | `{out, pages, bytes, seconds, navFromToc, warnings}` |
+| `/api/export/open` | `{path}` | `{ok}`; opens an exported site or PDF with the default program; only paths produced by an export of this session (403 otherwise) |
+| `/api/dialog/save` | `{title, initial, types, extension}` | `{path \| null}` (native "Save as") |
 | `/api/toc/edit` | `{op, mtime, force?, ...}` (see [toc.md](toc.md)) | `{toc: TocState, created, deleted}`; saved at once; 409 `conflict` / `exists`, and `referenced` for `delete` without `force` |
 | `/api/dialog/file` | `{title, initial, types: [[label, pattern]]}` | `{path \| null}` (native tkinter picker) |
 | `/api/image` | `{name, data (base64), dir?}` | `{path}`; sanitized name, `-2`, `-3`... suffix if already taken, `images` folder by default |
@@ -40,6 +48,8 @@ Server and MCP messages (errors, warnings) are in English only; the UI translate
 | `/api/mkdocs/serve` | — | `{url}`; runs `python -m mkdocs serve` on a free port (waits 120 s maximum), reuses the existing process |
 | `/api/settings/language` | `{language}` (code or `"auto"`) | `{ok}` |
 | `/api/lang/folder` | — | `{path}`; creates `%APPDATA%\mdEditor\lang` and opens it in Explorer |
+| `/api/ui/prefs` | `{key: value \| null}` | `{prefs}`; merged into the preferences (`null` deletes, values stored as strings); 413 above 64 KB |
+| `/api/ui/session` | `{root?, session}` | `{saved}`; session of the current folder (opaque object, 413 above 256 KB); ignored without a folder or when `root` is not the current one |
 
 `ProjectInfo` is described in `web/src/context.ts`; it must stay in sync with `Project.info()`.
 
@@ -62,6 +72,7 @@ Folder at startup: `--root`, else `MDEDITOR_ROOT`, else the editor's first recen
 | `extract_to_snippet(path, start_line, end_line, name, expected_mtime)` | no | Moves lines into a new snippet |
 | `search(query, regex, case_sensitive, kind)` | yes | Search in `.md` files |
 | `check_links()` | yes | Broken links and inclusions; `orphans`: topics linked from nowhere and absent from the table of contents, unused snippets |
+| `list_todos(filter)` | yes | TODO markers: file, line, column, text; optional words to find in the path or the line |
 | `find_references(path)` | yes | Links, snippet inclusions and table of contents entries pointing to a file |
 | `get_toc()` | yes | Table of contents tree, broken nodes, topics not in it |
 | `edit_toc(op, id, target, position, caption, href, create, keep_children, expected_mtime, force)` | no | Table of contents edit (see [toc.md](toc.md)); `delete` refused with the list of references unless `force` |

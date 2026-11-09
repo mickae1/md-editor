@@ -10,7 +10,11 @@ Output (folder mode: no extraction at startup):
     release/mdEditor/
         mdEditor.exe        application (Edge window in app mode)
         mdeditor-mcp.exe    MCP server (stdio) for Claude
-        _internal/          Python, libraries and UI, shared by both
+        mdeditor-cli.exe    command line: export the website or a PDF
+        install.ps1         per-user installation (shortcuts, PATH, optional MCP registration)
+        uninstall.ps1       undoes install.ps1
+        README.md, CHANGELOG.md, LICENSE
+        _internal/          Python, libraries and UI, shared by the three
     release/mdEditor-<version>-windows.zip
 """
 from __future__ import annotations
@@ -26,7 +30,7 @@ ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
 RELEASE = ROOT / "release"
 BUILD = ROOT / "build"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 # Two executables, one shared _internal folder (COLLECT).
 SPEC = r'''
@@ -36,14 +40,18 @@ common = dict(pathex=[root + "/server"], hookspath=[], runtime_hooks=[], noarchi
 
 app = Analysis([root + "/mdeditor.pyw"], datas=[(root + "/web/dist", "web"), (root + "/lang", "lang")], **common)
 mcp = Analysis([root + "/server/mcp_server.py"], datas=[], excludes=["tkinter"], **common)
+cli = Analysis([root + "/server/cli.py"], datas=[], excludes=["tkinter"], **common)
 
 app_exe = EXE(PYZ(app.pure), app.scripts, [], exclude_binaries=True, name="mdEditor",
               console=False, icon=root + "/assets/mdeditor.ico", upx=False)
 mcp_exe = EXE(PYZ(mcp.pure), mcp.scripts, [], exclude_binaries=True, name="mdeditor-mcp",
               console=True, icon=root + "/assets/mdeditor.ico", upx=False)
+cli_exe = EXE(PYZ(cli.pure), cli.scripts, [], exclude_binaries=True, name="mdeditor-cli",
+              console=True, icon=root + "/assets/mdeditor.ico", upx=False)
 
 COLLECT(app_exe, app.binaries, app.datas,
         mcp_exe, mcp.binaries, mcp.datas,
+        cli_exe, cli.binaries, cli.datas,
         name="mdEditor", upx=False)
 '''
 
@@ -75,6 +83,10 @@ def main():
     out = RELEASE / "mdEditor"
     shutil.copy(ROOT / "README.md", out / "README.md")
     shutil.copy(ROOT / "LICENSE", out / "LICENSE")
+    shutil.copy(ROOT / "CHANGELOG.md", out / "CHANGELOG.md")
+    # Per-user installer: install.ps1 / uninstall.ps1 next to the executables.
+    for script in ("install.ps1", "uninstall.ps1"):
+        shutil.copy(ROOT / "installer" / script, out / script)
     archive = shutil.make_archive(str(RELEASE / f"mdEditor-{VERSION}-windows"), "zip", RELEASE, "mdEditor")
 
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())

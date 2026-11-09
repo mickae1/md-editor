@@ -52,7 +52,8 @@ export function createLinkHelpers(host: EditorHost) {
             const href: string = link.attrs.href
             const target = resolveLink(href, host)
             if (target) ctx.openFile(target.path, target.anchor)
-            else if (/^https?:/i.test(href)) window.open(href, '_blank')
+            else if (href.startsWith('#') && href.length > 1) ctx.openFile(host.docPath, decodeURI(href.slice(1)))
+            else if (/^(https?|mailto):/i.test(href)) window.open(href, '_blank')
             return true
           },
         },

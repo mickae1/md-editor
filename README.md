@@ -22,6 +22,7 @@ It is built for documentation sets with hundreds of topics and reusable blocks, 
 - [Requirements](#requirements)
 - [Getting started](#getting-started)
 - [Using mdEditor](#using-mdeditor)
+- [Exporting the website or a PDF](#exporting-the-website-or-a-pdf)
 - [Configuration](#configuration)
 - [Claude integration (MCP)](#claude-integration-mcp)
 - [Markdown compatibility](#markdown-compatibility)
@@ -30,6 +31,7 @@ It is built for documentation sets with hundreds of topics and reusable blocks, 
 - [Building a release](#building-a-release)
 - [Project layout](#project-layout)
 - [Known limitations](#known-limitations)
+- [Changes](#changes)
 - [License](#license)
 
 ## Requirements
@@ -46,8 +48,15 @@ It is built for documentation sets with hundreds of topics and reusable blocks, 
 
 ### Compiled version
 
-1. Unzip `mdEditor-<version>-windows.zip` anywhere. It contains a `mdEditor/` folder with `mdEditor.exe`, `mdeditor-mcp.exe` and `_internal/` (keep them together).
-2. Run `mdEditor.exe`, or `mdEditor.exe D:\path\to\Help\Md` to open a documentation folder directly.
+1. Unzip `mdEditor-<version>-windows.zip`. It contains a `mdEditor/` folder with `mdEditor.exe` (the editor), `mdeditor-mcp.exe` (MCP server), `mdeditor-cli.exe` (command line exports) and `_internal/` (keep them together).
+2. Right-click `install.ps1` and choose *Run with PowerShell*. It needs no administrator rights:
+   - installs into `%LOCALAPPDATA%\Programs\mdEditor`;
+   - creates the Desktop and Start menu shortcuts;
+   - adds the folder to your `PATH`, so `mdeditor-cli` works in any new terminal.
+
+   With `-Mcp` (and optionally `-McpRoot D:\path\to\Help\Md`), it also registers the MCP server in Claude Code and Claude Desktop. `uninstall.ps1`, in the installation folder, undoes all of it and keeps your settings (`-RemoveSettings` removes them too).
+
+   You can also run `mdEditor.exe` directly from the unzipped folder without installing anything, or `mdEditor.exe D:\path\to\Help\Md` to open a documentation folder.
 
 The application starts in about half a second: nothing is unpacked at launch.
 
@@ -58,7 +67,7 @@ pythonw mdeditor.pyw                    # start screen
 pythonw mdeditor.pyw D:\path\to\Help\Md # open a folder directly
 ```
 
-To create Desktop and Start menu shortcuts, right-click `install-shortcut.ps1` and choose *Run with PowerShell*.
+To create Desktop and Start menu shortcuts for the source version, right-click `install-shortcut.ps1` and choose *Run with PowerShell*.
 
 The launcher starts a local server on a free port and opens Edge in app mode (a window without an address bar). The server stops when the window is closed.
 
@@ -87,9 +96,23 @@ The left panel has four tabs:
 
 Both side panels can be resized by dragging their inner edge, or with the arrow keys once the edge has the focus. Double-click the edge to reset the width. Widths are remembered, and the editor always keeps room in a small window.
 
+### Session
+
+When you quit, mdEditor remembers where you were in each folder: the open tabs in their order, the active tab, the scroll position and the cursor of each tab, the expanded folders of **Files** and entries of **Contents**, and the side tab. Started again without a folder, it reopens the last one and restores all of that. Unsaved changes are not part of the session: closing the window still asks about them.
+
+Both trees start fully collapsed; only what you expanded stays open. A topic opened from somewhere else (a link, Ctrl+P, the other tree, a search) is still revealed in the trees.
+
+A loading screen covers the window while the folder is scanned and the session restored, so that the first clicks are not lost.
+
 ### Editing
 
-Headings, emphasis, lists (Tab to indent), links with topic autocompletion (Ctrl+K; Ctrl+click opens the target), `<a id>` anchors, tables (rows, columns, alignment, resizing), code blocks with syntax highlighting, admonitions (`!!!`), collapsible blocks (`???`), content tabs (`===`) and raw HTML, which is preserved as is.
+Headings, emphasis, lists (Tab to indent), links (Ctrl+K: topics are suggested, and the anchors of a page as soon as you type `#`; Ctrl+click opens the target), `<a id>` anchors, tables (rows, columns, alignment, resizing), code blocks with syntax highlighting, admonitions (`!!!`), collapsible blocks (`???`), content tabs (`===`) and raw HTML, which is preserved as is.
+
+**Heading anchors.** A heading can carry an attr_list identifier, `## Dates selection { #creatanalyss2 }`. The identifier is not part of the editable title. A discreet `#creatanalyss2` badge shows it, and you right-click the heading to add, change or remove it, or to copy a link to it. It is saved at the end of the line as `{ #id }` (an existing `{#id}` keeps its spelling). Links can target these identifiers and the ones MkDocs generates from the title text (`#dates-selection`).
+
+**Links** keep the form they were written in: `[text](target)`, `<https://...>`, `<name@host>`, `<mailto:...>`, or HTML `<a href="...">`. HTML links, such as `<a href="mailto:...">` produced by converters, are editable links like the others, not raw HTML. Ctrl+click on a `mailto:` link opens the mail program.
+
+**TODO markers.** The word `TODO` (upper case, whole word) is highlighted in the text. The **TODO** tab lists every TODO of the project, grouped by page, with a filter. A click opens the page and selects the TODO. Fenced code blocks are ignored; HTML comments (`<!-- TODO ... -->`) are listed.
 
 You can drop or paste an image. The image file is copied into `images/` and inserted as an `<img>` tag. Then you can:
 - resize the image with its handle;
@@ -109,7 +132,7 @@ You can drop or paste an image. The image file is copied into `images/` and inse
 
 The site navigation lives in `Maps/table_of_contents.xml`, next to the documentation folder. mdEditor finds it automatically, or you can choose it in the project settings.
 
-- **Tree view.** Titles with their topic IDs, sections and pages, and broken entries flagged. The topic being edited is highlighted and revealed, however it was opened.
+- **Tree view.** Titles with their topic IDs, sections and pages, and broken entries flagged. The tree starts collapsed. The topic being edited is highlighted, and revealed when it was opened from elsewhere (a link, Ctrl+P, the Files tree...).
 - **Drag and drop** to reorder, move into another section, or change level. You can also drop a topic from the list of missing topics. Keyboard alternatives: Alt+arrows, and the context menu (move up/down, indent, outdent).
 - **Keyboard**: Up/Down to select, Enter to open, F2 to rename, Delete to remove from the menu.
 - **Rename** with F2, or by clicking the title of the selected entry. **Add topic** creates the `.md` file with its title and the menu entry in one step. You can also duplicate an entry, remove it from the menu (the file is kept), or delete the topic.
@@ -128,9 +151,29 @@ Every attribute and comment of the XML is preserved. The `modified` attribute is
 ### Saving and preview
 
 - Ctrl+S saves the current tab together with the modified snippets it includes. Ctrl+Shift+S saves everything.
-- If a file changed on disk (another editor, Git, Claude), you are asked before anything is overwritten. Files changed outside the editor are reloaded when the window gets the focus back.
+- **Changes made outside the editor** (Claude, Git, another program) are detected within two seconds, even while you stay in the window. Snippets shown inline are checked too.
+  - With no unsaved changes, the file is reloaded in place: the scroll position and the cursor are kept.
+  - With unsaved changes, you choose between *Keep my changes* and *Reload and lose my changes*. If you keep them, you are not asked again for that version, and saving asks before overwriting the other one.
 - **Diff** shows exactly what will be written, and **Source** shows the generated Markdown.
 - **Build & Preview** runs `mkdocs serve` and opens the current page in the browser.
+
+## Exporting the website or a PDF
+
+The **Export** button (title bar) builds the documentation with MkDocs. The documentation folder is never modified.
+
+- **Website**: one `.html` file per `.md` file, with the same name (`GeneralViews-Map.md` becomes `GeneralViews-Map.html`), and relative links, so the folder can be opened from the disk or copied to a web server. The navigation follows the table of contents. A **Contents** page listing it comes first in the menu: `contents.html`, or `index.html` when the project has no `index.md` (otherwise `index.html` stays the home page). The output folder is emptied first, so only an empty folder, the `site_dir` of `mkdocs.yml` or a previous export is accepted.
+- **PDF**: one file with the contents on the first page, then one page per topic, in the order of the table of contents. Links between pages work inside the PDF. Edge prints it from the built site.
+
+The same exports are available from the command line, without opening the editor. This is useful in a build script:
+
+```
+mdeditor-cli export-html D:\path\to\Help\Md D:\path\to\website
+mdeditor-cli export-pdf  D:\path\to\Help\Md D:\path\to\Documentation.pdf
+```
+
+From source, use `python server/cli.py` with the same arguments. `--no-toc` keeps the navigation of `mkdocs.yml`. The exit code is 0 on success, 1 when the export failed, and 2 for wrong arguments.
+
+Both need MkDocs with the site's plugins (`pip install mkdocs-material`). If MkDocs is installed in a specific Python environment, set `MDEDITOR_MKDOCS` to its `python.exe` or `mkdocs.exe`.
 
 ### Keyboard shortcuts
 
@@ -149,7 +192,7 @@ Every attribute and comment of the XML is preserved. The `modified` attribute is
 
 ## Configuration
 
-mdEditor never writes configuration into the documentation folder. Settings are stored per user in `%APPDATA%\mdEditor\settings.json`.
+mdEditor never writes configuration into the documentation folder. Settings are stored per user in `%APPDATA%\mdEditor\settings.json`: project settings, recent folders, interface preferences (theme, panel widths, side tab) and the session of each folder (see [Session](#session)).
 
 | Setting | Where | Default |
 |---|---|---|
@@ -158,6 +201,8 @@ mdEditor never writes configuration into the documentation folder. Settings are 
 | Table of contents file | Project settings | `Maps/table_of_contents.xml` next to or inside the root |
 | Theme (dark/light), project CSS | Theme menu | Dark; project CSS off |
 | Interface language | Theme menu | Automatic (Windows language) |
+| Panel widths and visibility, side tab | Drag the panel edge, title bar buttons | 280 / 270 px, both panels shown, Files |
+| Session (tabs, scroll, expanded trees) | Saved automatically, per folder | Empty: trees collapsed |
 
 ### Interface language
 
@@ -180,6 +225,7 @@ Files are merged key by key, so a file only needs the texts it changes. A new co
 | `create_snippet`, `insert_snippet`, `extract_to_snippet` | Create, include and extract snippets |
 | `snippet_usage`, `find_references` | What includes a snippet; everything that points to a file |
 | `search`, `check_links` | Search; broken links and orphan files |
+| `list_todos` | Every TODO marker left in the pages (file, line, text) |
 | `get_toc`, `edit_toc` | Read and edit the table of contents (deleting a referenced topic requires explicit confirmation) |
 
 **Claude Code**
@@ -208,7 +254,8 @@ From source, use `"command": "python"` and put `server/mcp_server.py` first in `
 The editor parses Markdown into a document model and serializes it back. The rendered result is unchanged, and the following is guaranteed:
 
 - images as HTML `<img src alt width height>`, never `![]()`;
-- anchors as `<a id="..."></a>`, line breaks as `<br>`, pipe tables;
+- anchors as `<a id="..."></a>`, heading identifiers as `## Title { #id }`, line breaks as `<br>`, pipe tables;
+- links in their original form (Markdown, autolink `<...>`, HTML `<a href>`);
 - `--8<-- "..."` inclusions, line and block forms (`;--8<--` disabled inclusions are kept);
 - admonitions, details and tabs with 4-space indentation (Python-Markdown);
 - unknown HTML preserved verbatim;
@@ -254,6 +301,7 @@ python server/app.py sample/Help/Md --port 8765 --no-window
 | Unit | `npm test` (in `web/`) | Markdown round trip on every sample file and on targeted cases; language files |
 | Server | `python server/test_toc.py` | Table of contents read/write, every operation, orphans, references, deletion guard |
 | MCP | `python server/test_mcp.py` | Every MCP tool over stdio |
+| Export | `python server/test_export.py` | Navigation from the table of contents, output folder safety; with MkDocs (`MDEDITOR_MKDOCS`): real website and PDF |
 | End to end | `node tests/e2e.mjs <copy>/Help/Md <screenshots>` (in `web/`) | The real UI in headless Edge, against a server on port 8799 |
 
 The server tests run on a temporary copy of `sample/`. Run the end-to-end test against a copy too, never against `sample/` itself.
@@ -282,7 +330,7 @@ python build.py              # rebuilds the UI (Node.js), then the executables
 python build.py --skip-web   # reuses web/dist
 ```
 
-The output is `release/mdEditor/` (two executables sharing `_internal/`) and `release/mdEditor-<version>-windows.zip`. See [doc/build-release.md](doc/build-release.md) for the release checklist.
+The output is `release/mdEditor/` (three executables sharing `_internal/`) and `release/mdEditor-<version>-windows.zip`. See [doc/build-release.md](doc/build-release.md) for the release checklist.
 
 Unsigned PyInstaller executables are sometimes flagged by corporate antivirus software. Sign them with a company certificate or have them allow-listed.
 
@@ -293,6 +341,8 @@ mdeditor.pyw            launcher (no console)
 server/
   app.py                HTTP server, project model, launcher, watchdog
   toc.py                table of contents (Maps/table_of_contents.xml)
+  export.py             website and PDF export (MkDocs, Edge)
+  cli.py                command line (mdeditor-cli)
   mcp_server.py         MCP server (stdio)
   test_toc.py, test_mcp.py
 web/
@@ -309,6 +359,8 @@ doc/                    developer documentation
 sample/Help/            sample documentation project (Md/, Maps/, mkdocs.yml)
 build.py                PyInstaller build
 install-shortcut.ps1    Desktop / Start menu shortcuts (source install)
+installer/              install.ps1 / uninstall.ps1 of the compiled version (copied into the release)
+CHANGELOG.md            changes by version
 ```
 
 ## Known limitations
@@ -316,8 +368,13 @@ install-shortcut.ps1    Desktop / Start menu shortcuts (source install)
 - **Windows first.** The native folder and file dialogs and the app window rely on Windows, Edge or Chrome. Other platforms are only used for development.
 - **Messages from the server and the MCP server are in English**, whatever the interface language.
 - **Table of contents XML.** Entities declared in a DTD and namespace prefixes are not supported. Attributes are rewritten with double quotes.
-- **Build & Preview** needs MkDocs and the site's plugins to be installed. The compiled version looks for `mkdocs` or `python` in `PATH`.
+- **Build & Preview and the exports** need MkDocs and the site's plugins to be installed. The compiled version looks for `mkdocs` or `python` in `PATH`, or uses `MDEDITOR_MKDOCS`.
+- The generated **Contents** page and the PDF headings ("Contents") are in English.
 - The editor does not generate the MkDocs `nav`: it is produced from the table of contents by the documentation build.
+
+## Changes
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

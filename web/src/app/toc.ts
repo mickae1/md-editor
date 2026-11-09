@@ -18,6 +18,8 @@ export interface TocPanelOptions {
   closeFile: (path: string) => Promise<boolean>
   /** Called with the number of broken nodes after every load. */
   onBroken: (n: number) => void
+  /** Called when a node or the orphan list is expanded or collapsed (session saving). */
+  onExpandChange?: () => void
 }
 
 /** Topic ID generated from a title: "Import données" -> "Import-donnees". */
@@ -48,7 +50,10 @@ export class TocPanel {
   private toolbar: HTMLElement
   private state: TocState | null = null
   private signature = ''
-  private collapsed = new Set<string>()
+  /** Expanded nodes (nodeKey): everything is collapsed by default (the session restores them). */
+  private expanded = new Set<string>()
+  /** Topic opened from this tree: no reveal (the user clicked a visible row). */
+  private selfOpen: string | null = null
   private orphansOpen = true
   private selectedId: string | null = null
   private activePath: string | null = null
@@ -119,7 +124,7 @@ export class TocPanel {
     const walk = (nodes: TocNode[], depth: number) => {
       for (const n of nodes) {
         rows.push(this.nodeRow(n, depth))
-        if (n.children.length && !this.collapsed.has(nodeKey(n))) walk(n.children, depth + 1)
+        if (n.children.length && this.expanded.has(nodeKey(n))) walk(n.children, depth + 1)
       }
     }
     walk(s.tree, 0)
@@ -134,9 +139,9 @@ export class TocPanel {
   private nodeRow(n: TocNode, depth: number) {
     const broken = isBroken(n)
     const hasChildren = n.children.length > 0
-    const open = !this.collapsed.has(nodeKey(n))
+    const open = this.expanded.has(nodeKey(n))
     const row = h('div', {
-      class: `tree-item toc-item ${hasChildren ? 'has-children' : ''} ${broken ? 'broken' : ''} ${n.id === this.selectedId ? 'selected' : ''}`,
+      class: `tree-item toc-item ${hasChildren ? 'has-children' : ''} ${hasChildren && open ? 'open' : ''} ${broken ? 'broken' : ''} ${n.id === this.selectedId ? 'selected' : ''}`,
       style: `padding-left:${6 + depth * 14}px`,
       draggable: 'true',
       dataset: { id: n.id, file: n.file ?? '' },
@@ -165,7 +170,7 @@ export class TocPanel {
 
   private orphanSection(orphans: string[]): HTMLElement[] {
     if (!orphans.length) return []
-    const header = h('div', { class: 'toc-orphans-title', onclick: () => { this.orphansOpen = !this.orphansOpen; this.render() } },
+    const header = h('div', { class: 'toc-orphans-title', onclick: () => { this.orphansOpen = !this.orphansOpen; this.opts.onExpandChange?.(); this.render() } },
       icon(this.orphansOpen ? 'chevronDown' : 'chevronRight', 14),
       h('span', null, t('toc.orphans', { n: orphans.length })))
     if (!this.orphansOpen) return [header]
@@ -226,18 +231,43 @@ export class TocPanel {
 
   private rowOf(id: string) { return this.body.querySelector<HTMLElement>(`.toc-item[data-id="${CSS.escape(id)}"]`) }
 
-  /** Highlights the node of the active topic; expands its ancestors and scrolls it into view. */
-  setActive(path: string | null) {
+  /** Expanded node keys, for the session. */
+  expandedKeys() { return [...this.expanded] }
+  get orphansExpanded() { return this.orphansOpen }
+
+  /** Restores the expanded nodes (session), without revealing anything. */
+  setExpanded(keys: string[], orphansOpen = true) {
+    this.expanded = new Set(keys)
+    this.orphansOpen = orphansOpen
+    this.render()
+  }
+
+  /** Expands a node; true if it was collapsed. */
+  private expand(key: string) {
+    if (this.expanded.has(key)) return false
+    this.expanded.add(key)
+    this.opts.onExpandChange?.()
+    return true
+  }
+
+  /**
+   * Highlights the node of the active topic and scrolls it into view. With
+   * `reveal`, expands its ancestors, unless the topic was opened from this tree
+   * (the user clicked a visible row; the topic may also appear elsewhere).
+   */
+  setActive(path: string | null, reveal = true) {
     if (path && path === this.refocusPath) { this.refocusPath = null; this.keepFocus() }
     if (path === this.activePath) return
     this.activePath = path
+    const fromTree = path !== null && path === this.selfOpen
+    this.selfOpen = null
     if (!path || !this.state) { this.highlightActive(false); return }
-    const node = this.find(n => n.file?.toLowerCase() === path.toLowerCase())
+    const node = reveal && !fromTree ? this.find(n => n.file?.toLowerCase() === path.toLowerCase()) : null
     if (node) {
       let changed = false
       for (let p = parentId(node.id); p !== null; p = parentId(p)) {
         const anc = this.byId(p)
-        if (anc && this.collapsed.delete(nodeKey(anc))) changed = true
+        if (anc && this.expand(nodeKey(anc))) changed = true
       }
       if (changed && !this.renaming) this.render()
     }
@@ -262,13 +292,14 @@ export class TocPanel {
 
   private toggle(n: TocNode) {
     const k = nodeKey(n)
-    if (!this.collapsed.delete(k)) this.collapsed.add(k)
+    if (!this.expanded.delete(k)) this.expanded.add(k)
+    this.opts.onExpandChange?.()
     this.render()
   }
 
   private collapseAll() {
-    const walk = (nodes: TocNode[]) => nodes.forEach(n => { if (n.children.length) { this.collapsed.add(nodeKey(n)); walk(n.children) } })
-    walk(this.state?.tree ?? [])
+    this.expanded.clear()
+    this.opts.onExpandChange?.()
     this.render()
   }
 
@@ -291,6 +322,7 @@ export class TocPanel {
   private open(n: TocNode) {
     if (!n.file) { if (n.children.length) this.toggle(n); return }
     if (!n.exists) { toast(t('toc.brokenToast', { file: n.file }), 'error'); return }
+    this.selfOpen = n.file
     ctx.openFile(n.file)
   }
 
@@ -318,7 +350,7 @@ export class TocPanel {
       if (next) { this.select(next.dataset.id!); next.scrollIntoView({ block: 'nearest' }) }
     } else if ((key === 'ArrowRight' || key === 'ArrowLeft') && n && n.children.length) {
       e.preventDefault()
-      const isOpen = !this.collapsed.has(nodeKey(n))
+      const isOpen = this.expanded.has(nodeKey(n))
       if (isOpen !== (key === 'ArrowRight')) this.toggle(n)
     } else if (key === 'Delete' && n) { e.preventDefault(); void this.removeNode(n) }
     else if (key === 'ContextMenu' && n) {
@@ -419,7 +451,7 @@ export class TocPanel {
     const sibs = this.siblings(n.id)
     const i = sibs.findIndex(s => s.id === n.id)
     if (i <= 0) return
-    this.collapsed.delete(nodeKey(sibs[i - 1]))
+    this.expand(nodeKey(sibs[i - 1]))
     await this.move(n, sibs[i - 1].id, 'inside')
   }
 
@@ -471,7 +503,7 @@ export class TocPanel {
     const r = await this.topicDialog(t('toc.addTitle'), { caption: '', href: '' }, prefix, t('toc.add'))
     if (!r) return
     const res = await this.edit({ op: 'add', target: target?.id ?? null, position: position ?? 'inside', caption: r.caption, href: r.href, create: true })
-    if (target && position === 'inside') this.collapsed.delete(nodeKey(target))
+    if (target && position === 'inside') this.expand(nodeKey(target))
     if (res?.created) { this.selectNewNode(r.href); ctx.openFile(res.created) }
   }
 
@@ -603,7 +635,7 @@ export class TocPanel {
   async addOrphan(path: string, target: TocNode | null = this.selected(), position: TocPosition = 'inside') {
     const caption = await this.orphanCaption(path)
     const href = path.replace(/\.md$/i, '')
-    if (target && position === 'inside') this.collapsed.delete(nodeKey(target))
+    if (target && position === 'inside') this.expand(nodeKey(target))
     const r = await this.edit({ op: 'add', target: target?.id ?? null, position, caption, href, create: false }, { reload: true })
     if (r) this.selectNewNode(href)
   }
@@ -658,12 +690,12 @@ export class TocPanel {
     row.classList.toggle('drop-after', pos === 'after')
     row.classList.toggle('drop-inside', pos === 'inside')
     // Hovering a collapsed section opens it after a while.
-    if (n.children.length && this.collapsed.has(nodeKey(n)) && this.expandRow !== row) {
+    if (n.children.length && !this.expanded.has(nodeKey(n)) && this.expandRow !== row) {
       clearTimeout(this.expandTimer)
       this.expandRow = row
       this.expandTimer = window.setTimeout(() => {
         this.expandRow = null
-        this.collapsed.delete(nodeKey(n))
+        this.expand(nodeKey(n))
         this.render()
       }, 600)
     }
@@ -676,7 +708,7 @@ export class TocPanel {
     e.stopPropagation()
     const pos = this.dropPosition(e, row)
     this.endDrag()
-    if (pos === 'inside') this.collapsed.delete(nodeKey(n))
+    if (pos === 'inside') this.expand(nodeKey(n))
     if (d.kind === 'orphan') await this.addOrphan(d.path, n, pos)
     else { const src = this.byId(d.id); if (src) await this.move(src, n.id, pos) }
   }
