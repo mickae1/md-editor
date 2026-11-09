@@ -85,6 +85,8 @@ The left panel has four tabs:
 | **Links** | Broken links and snippet inclusions, and orphan files (see below) |
 | **Contents** | The table of contents: the site navigation tree |
 
+Both side panels can be resized by dragging their inner edge, or with the arrow keys once the edge has the focus. Double-click the edge to reset the width. Widths are remembered, and the editor always keeps room in a small window.
+
 ### Editing
 
 Headings, emphasis, lists (Tab to indent), links with topic autocompletion (Ctrl+K; Ctrl+click opens the target), `<a id>` anchors, tables (rows, columns, alignment, resizing), code blocks with syntax highlighting, admonitions (`!!!`), collapsible blocks (`???`), content tabs (`===`) and raw HTML, which is preserved as is.

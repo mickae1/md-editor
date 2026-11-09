@@ -66,6 +66,7 @@ server/mcp_server.py ┘  (stdio, for Claude; reuses Project from app.py)
 | `app/snippetsPanel.ts` | Snippet side panel, "Show topics using it". |
 | `app/toolbar.ts`, `app/commands.ts` | Toolbar and editing commands (link, anchor, table, admonition, snippet...). |
 | `app/views.ts` | Search/replace, broken links, project settings, diff, Markdown preview. |
+| `app/resize.ts` | Resizable side panels: drag handle, keyboard, double-click reset, width saved in `localStorage`. |
 | `ui/` | Small DOM helpers: `h()`, dialogs, palette, lucide icons. |
 | `styles/` | `app.css` (application chrome), `content.css` (content rendering, close to Material for MkDocs; the project's `extra_css` can be applied on top, using the color schemes of its `mkdocs.yml`). |
 

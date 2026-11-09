@@ -357,5 +357,6 @@
   "deleteFile.includes": "Inclusions de snippet",
   "deleteFile.toc": "Table des matières",
   "deleteFile.openTooltip": "Ouvrir {file}",
-  "deleteFile.deleted": "Supprimé : {file}"
+  "deleteFile.deleted": "Supprimé : {file}",
+  "main.resizePanel": "Glisser pour redimensionner, double-clic pour réinitialiser"
 }

@@ -84,7 +84,7 @@ input, select, textarea { font: inherit; color: var(--fg-strong); }
 /* Structure ------------------------------------------------------------- */
 .main { flex: 1; display: flex; min-height: 0; position: relative; }
 .main.no-project > .side, .main.no-project > .center { display: none; }
-.side { width: 280px; flex: none; display: flex; flex-direction: column; background: var(--bg-side); min-height: 0; }
+.side { width: 280px; flex: none; display: flex; flex-direction: column; background: var(--bg-side); min-height: 0; position: relative; container-type: inline-size; }
 .side.left { border-right: 1px solid var(--border); }
 .side.right { border-left: 1px solid var(--border); width: 270px; }
 .center { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -105,6 +105,18 @@ input, select, textarea { font: inherit; color: var(--fg-strong); }
   font-size: 9px; line-height: 13px; border-radius: 7px; box-shadow: 0 0 0 2px var(--bg-side);
 }
 .side-content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* Panel width handle (app/resize.ts), over the panel border */
+.panel-resizer { position: absolute; top: 0; bottom: 0; width: 7px; z-index: 5; cursor: col-resize; touch-action: none; }
+.panel-resizer.left { right: -4px; }
+.panel-resizer.right { left: -4px; }
+.panel-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; transition: background .15s; }
+.panel-resizer:hover::after, .panel-resizer:focus-visible::after, body.resizing-panel .panel-resizer::after { background: var(--accent); }
+.panel-resizer:focus-visible { outline: none; }
+body.resizing-panel { cursor: col-resize; user-select: none; }
+body.resizing-panel iframe, body.resizing-panel .md-content { pointer-events: none; }
+/* Narrow left panel: tabs show their icon only (the label stays in the tooltip). */
+@container (max-width: 270px) { .side-tab-label { display: none; } }
 .filter {
   margin: 8px; padding: 6px 9px; border-radius: var(--radius);
   background: var(--bg-input); border: 1px solid var(--border); outline: none;

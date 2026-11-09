@@ -22,6 +22,7 @@ import { Toolbar } from './app/toolbar'
 import { BrokenLinksView, SearchView, projectSettings, showDiff, showSource } from './app/views'
 import * as cmd from './app/commands'
 import { i18n, t } from './i18n'
+import { makeResizable } from './app/resize'
 
 // --------------------------------------------------------------------------
 // Local preferences (convenience only)
@@ -124,6 +125,8 @@ function togglePanel(panel: HTMLElement, key: string) {
 }
 leftPanel.hidden = pref.get('panel.left', '1') === '0'
 rightPanel.hidden = pref.get('panel.right', '1') === '0'
+makeResizable(leftPanel, 'left', 280, pref)
+makeResizable(rightPanel, 'right', 270, pref)
 
 // --------------------------------------------------------------------------
 // Theme
