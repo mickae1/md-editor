@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Navigation of the sample documentation (converted to the mkdocs.yml nav at build time) -->
+<map defaulttopic="index">
+  <topicref type="topic" href="index" id="toc-001" build="all" modified="2025-03-14T09:12:00" icon="home">
+    <caption translate="true">Welcome</caption>
+  </topicref>
+  <topicref type="topic" href="GeneralViews-Map" id="toc-002" build="all" modified="2025-03-14T09:12:00">
+    <caption translate="true">General views</caption>
+    <topicref type="topic" href="GeneralViews-BasicEditors" id="toc-003" build="all" modified="2025-03-14T09:12:00">
+      <caption translate="true">Basic editors</caption>
+    </topicref>
+    <topicref type="topic" href="GeneralViews-EntityViewer-Filters" id="toc-004" build="all" modified="2025-03-14T09:12:00">
+      <caption translate="true">Entity viewer</caption>
+      <!-- Analysis pages -->
+      <topicref type="topic" href="GeneralViews-EntityViewer-Analysis-Overview" id="toc-005" build="all" modified="2025-03-14T09:12:00">
+        <caption translate="true">Analysis overview</caption>
+      </topicref>
+      <topicref type="topic" href="GeneralViews-EntityViewer-Analysis-Charts" id="toc-006" build="all" modified="2025-03-14T09:12:00">
+        <caption translate="true">Charts</caption>
+      </topicref>
+    </topicref>
+  </topicref>
+  <topicref type="topic" href="Workflow-CreateScenario" id="toc-007" build="all" modified="2025-03-14T09:12:00">
+    <caption translate="true">Create a scenario</caption>
+    <topicref type="topic" href="Workflow-ImportData" id="toc-008" build="all" modified="2025-03-14T09:12:00">
+      <caption translate="true">Import data</caption>
+    </topicref>
+  </topicref>
+</map>

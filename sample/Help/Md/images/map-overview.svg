@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270">
+  <rect x="1" y="1" width="478" height="268" rx="6" fill="none" stroke="#555" stroke-width="2"/>
+  <path d="M40 220 L140 90 L260 150 L360 60 L440 120" fill="none" stroke="#c4a744" stroke-width="3"/>
+  <path d="M60 60 L200 230 M300 230 L420 40" stroke="#4aa3df" stroke-width="2" stroke-dasharray="6 6"/>
+  <g fill="#d1d1d1"><circle cx="140" cy="90" r="6"/><circle cx="260" cy="150" r="6"/><circle cx="360" cy="60" r="6"/></g>
+  <text x="20" y="250" fill="#b4b4b4" font-family="sans-serif" font-size="14">Sector LFFF - sample</text>
+</svg>

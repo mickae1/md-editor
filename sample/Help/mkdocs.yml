@@ -1,0 +1,27 @@
+site_name: Sample documentation
+docs_dir: Md
+site_dir: Html
+theme:
+  name: material
+  custom_dir: overrides
+  palette:
+    - scheme: sample-dark
+    - scheme: sample-light
+extra_css:
+  - stylesheets/theme.css
+exclude_docs: |
+  _snippets/
+markdown_extensions:
+  - admonition
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      base_path: Md
+      check_paths: true

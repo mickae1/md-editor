@@ -1,0 +1,6 @@
+/* Sample theme: custom dark and light color schemes. */
+[data-md-color-scheme="sample-dark"] {
+  --md-default-bg-color: #191919;
+  --md-default-fg-color: #B4B4B4;
+  --md-typeset-a-color: #c4a744;
+}
